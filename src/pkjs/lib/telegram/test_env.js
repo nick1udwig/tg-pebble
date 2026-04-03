@@ -12,6 +12,12 @@ var REQUIRED_ENV_KEYS = Object.freeze([
   "TG_TEST_CODE"
 ]);
 
+var PLACEHOLDER_PATTERNS = Object.freeze({
+  apiHash: /replace-with-api-hash/i,
+  phoneNumber: /[XY]/i,
+  phoneCode: /X/i
+});
+
 function parseBoolean(value, fallback) {
   if (value === undefined || value === null || value === "") {
     return fallback;
@@ -29,6 +35,7 @@ function loadTelegramTestEnv(env) {
   var source = env || process.env;
   var apiId = parseInteger(source.TG_API_ID);
   var missing = [];
+  var errors = [];
   var key;
 
   for (key of REQUIRED_ENV_KEYS) {
@@ -39,6 +46,26 @@ function loadTelegramTestEnv(env) {
 
   if (!Number.isFinite(apiId)) {
     missing.push("TG_API_ID");
+  }
+
+  if (source.TG_API_HASH && PLACEHOLDER_PATTERNS.apiHash.test(String(source.TG_API_HASH))) {
+    errors.push("TG_API_HASH still contains the example placeholder value.");
+  }
+
+  if (source.TG_TEST_PHONE) {
+    if (PLACEHOLDER_PATTERNS.phoneNumber.test(String(source.TG_TEST_PHONE))) {
+      errors.push("TG_TEST_PHONE still contains X/Y placeholder characters.");
+    } else if (!/^\+?\d+$/.test(String(source.TG_TEST_PHONE))) {
+      errors.push("TG_TEST_PHONE must contain only digits, optionally prefixed by '+'.");
+    }
+  }
+
+  if (source.TG_TEST_CODE) {
+    if (PLACEHOLDER_PATTERNS.phoneCode.test(String(source.TG_TEST_CODE))) {
+      errors.push("TG_TEST_CODE still contains example placeholder characters.");
+    } else if (!/^\d+$/.test(String(source.TG_TEST_CODE))) {
+      errors.push("TG_TEST_CODE must contain only digits.");
+    }
   }
 
   return {
@@ -59,12 +86,13 @@ function loadTelegramTestEnv(env) {
     reconnectRetries: Number.isFinite(parseInteger(source.TG_TEST_RECONNECT_RETRIES))
       ? parseInteger(source.TG_TEST_RECONNECT_RETRIES)
       : 0,
-    missing: Array.from(new Set(missing))
+    missing: Array.from(new Set(missing)),
+    errors: errors
   };
 }
 
 function canRunTelegramTestEnv(config) {
-  return config.enabled === true && config.missing.length === 0;
+  return config.enabled === true && config.missing.length === 0 && config.errors.length === 0;
 }
 
 function createTelegramTestClient(config, sessionString) {

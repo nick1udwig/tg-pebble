@@ -13,6 +13,20 @@ import {
 const config = loadTelegramTestEnv();
 const describeIf = canRunTelegramTestEnv(config) ? describe : describe.skip;
 
+if (config.enabled && (config.missing.length > 0 || config.errors.length > 0)) {
+  describe("Telegram Test DC auth integration config", () => {
+    it("has valid Telegram Test DC environment variables", () => {
+      expect({
+        missing: config.missing,
+        errors: config.errors,
+      }).toEqual({
+        missing: [],
+        errors: [],
+      });
+    });
+  });
+}
+
 describeIf("Telegram Test DC auth integration", () => {
   let loginClient;
   let sessionString = "";
