@@ -77,6 +77,8 @@ function loadTelegramTestEnv(env) {
     phoneNumber: String(source.TG_TEST_PHONE || ""),
     phoneCode: String(source.TG_TEST_CODE || ""),
     password: String(source.TG_TEST_PASSWORD || ""),
+    firstName: String(source.TG_TEST_FIRST_NAME || "TG"),
+    lastName: String(source.TG_TEST_LAST_NAME || "Pebble"),
     useWSS: parseBoolean(source.TG_TEST_USE_WSS, true),
     testServers: parseBoolean(source.TG_TEST_SERVERS, true),
     connectionRetries: Number.isFinite(parseInteger(source.TG_TEST_CONNECTION_RETRIES))
@@ -140,27 +142,75 @@ function createTelegramTestClient(config, sessionString) {
   return client;
 }
 
+function isExistingAccountError(error) {
+  var errorMessage = error && error.errorMessage;
+  return errorMessage === "PHONE_NUMBER_OCCUPIED";
+}
+
+async function ensureTelegramTestClientConnected(client) {
+  if (!client.connected) {
+    await client.connect();
+  }
+}
+
+async function sendTelegramTestCode(client, config) {
+  var sendCodeResult;
+
+  await ensureTelegramTestClientConnected(client);
+  sendCodeResult = await client.sendCode({
+    apiId: config.apiId,
+    apiHash: config.apiHash
+  }, config.phoneNumber, false);
+
+  if (!sendCodeResult || typeof sendCodeResult.phoneCodeHash !== "string") {
+    throw new Error("Failed to retrieve Telegram phone code hash.");
+  }
+
+  return sendCodeResult.phoneCodeHash;
+}
+
+async function signUpTelegramTestUser(client, config, phoneCodeHash) {
+  return client.invoke(new Api.auth.SignUp({
+    phoneNumber: config.phoneNumber,
+    phoneCodeHash: phoneCodeHash,
+    firstName: config.firstName,
+    lastName: config.lastName
+  }));
+}
+
+async function signInTelegramTestUser(client, config, phoneCodeHash) {
+  return client.invoke(new Api.auth.SignIn({
+    phoneNumber: config.phoneNumber,
+    phoneCodeHash: phoneCodeHash,
+    phoneCode: config.phoneCode
+  }));
+}
+
 async function loginTelegramTestUser(client, config) {
-  var authError = null;
+  var phoneCodeHash;
+  var signUpError = null;
+  var signInResult;
 
-  await client.start({
-    phoneNumber: async function() {
-      return config.phoneNumber;
-    },
-    password: async function() {
-      return config.password;
-    },
-    phoneCode: async function() {
-      return config.phoneCode;
-    },
-    onError: async function(error) {
-      authError = error;
-      return true;
+  phoneCodeHash = await sendTelegramTestCode(client, config);
+
+  try {
+    await signUpTelegramTestUser(client, config, phoneCodeHash);
+    return client.session.save();
+  } catch (error) {
+    signUpError = error;
+    if (!isExistingAccountError(error)) {
+      // Continue into sign-in anyway, to support cases where sign-up-first
+      // touches test-server state but the account already exists.
     }
-  });
+  }
 
-  if (authError) {
-    throw authError;
+  signInResult = await signInTelegramTestUser(client, config, phoneCodeHash);
+  if (signInResult instanceof Api.auth.AuthorizationSignUpRequired) {
+    if (signUpError) {
+      throw signUpError;
+    }
+
+    await signUpTelegramTestUser(client, config, phoneCodeHash);
   }
 
   return client.session.save();
