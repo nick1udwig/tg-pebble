@@ -11,7 +11,7 @@ Implemented scenarios:
   - injects `Down` and `Select` through the QEMU monitor using the official `Q/W/S/X` keyboard mapping
   - captures the first chat view
   - runs emulator dictation through `pebble transcribe`
-  - captures the preview window and the post-send chat state
+  - captures the dictation listening screen, preview window, and post-send chat state
 
 Planned follow-ups:
 

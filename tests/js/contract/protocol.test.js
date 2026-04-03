@@ -10,6 +10,7 @@ import {
   MessageType,
   serializeChatItem,
   serializeMessageItem,
+  serializeSettingsState,
   serializeSendResult,
 } from "../../../src/pkjs/lib/protocol.js";
 import { addSenderRunMetadata } from "../../../src/pkjs/lib/message_groups.js";
@@ -78,5 +79,7 @@ describe("watch/pkjs protocol fixtures", () => {
     expect(serializeSendResult({ ok: false, detail: "Fixture transport rejected the message." })).toBe(
       "error|Fixture transport rejected the message.",
     );
+    expect(serializeSettingsState({ sendMode: "preview", previewChatMessage: false })).toBe("preview|0");
+    expect(serializeSettingsState({ sendMode: "auto", previewChatMessage: true })).toBe("auto|1");
   });
 });

@@ -5,6 +5,7 @@ const DEFAULT_STATE = Object.freeze({
   loginCode: "",
   password: "",
   sendMode: "preview",
+  previewChatMessage: false,
 });
 
 function loadState() {
@@ -38,6 +39,7 @@ function readFormState() {
     loginCode: document.querySelector("#login-code").value.trim(),
     password: document.querySelector("#password").value,
     sendMode: document.querySelector('input[name="send-mode"]:checked').value,
+    previewChatMessage: document.querySelector("#preview-chat-message").checked,
   };
 }
 
@@ -47,6 +49,7 @@ function writeFormState(state) {
   document.querySelector("#password").value = state.password;
   document.querySelector(`#send-mode-${state.sendMode}`)?.setAttribute("checked", "checked");
   document.querySelector(`#send-mode-${state.sendMode}`)?.click();
+  document.querySelector("#preview-chat-message").checked = state.previewChatMessage === true;
 }
 
 function reveal(buttonId) {
@@ -72,6 +75,13 @@ function bootstrap() {
       getBridge().submit({ action: "settings:update", state: nextState });
       setStatus(`Send mode saved: ${nextState.sendMode}`, "success");
     });
+  });
+
+  document.querySelector("#preview-chat-message").addEventListener("change", () => {
+    const nextState = readFormState();
+    saveState(nextState);
+    getBridge().submit({ action: "settings:update", state: nextState });
+    setStatus(`Chat previews ${nextState.previewChatMessage ? "enabled" : "disabled"}.`, "success");
   });
 
   document.querySelector("#save-login").addEventListener("click", () => {
@@ -112,4 +122,3 @@ function bootstrap() {
 }
 
 bootstrap();
-

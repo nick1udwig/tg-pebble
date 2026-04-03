@@ -7,7 +7,8 @@ var CACHE_KEYS = Object.freeze({
 });
 
 var DEFAULT_SETTINGS = Object.freeze({
-  sendMode: "preview"
+  sendMode: "preview",
+  previewChatMessage: false
 });
 
 function createMemoryStorage() {
@@ -31,7 +32,8 @@ function createMemoryStorage() {
 
 function mergeSettings(settings) {
   var merged = {
-    sendMode: DEFAULT_SETTINGS.sendMode
+    sendMode: DEFAULT_SETTINGS.sendMode,
+    previewChatMessage: DEFAULT_SETTINGS.previewChatMessage
   };
   var key;
 
@@ -102,7 +104,7 @@ function createCacheStore(storage, options) {
       return mergeSettings(getJson(CACHE_KEYS.settings, {}));
     },
     setSettings: function(settings) {
-      return setJson(CACHE_KEYS.settings, mergeSettings(settings));
+      return setJson(CACHE_KEYS.settings, mergeSettings(Object.assign({}, this.getSettings(), settings)));
     },
     getChatList: function() {
       return getJson(CACHE_KEYS.chatList, []);

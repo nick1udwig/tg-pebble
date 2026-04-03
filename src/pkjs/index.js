@@ -7,6 +7,7 @@ var encodeMessage = protocol.encodeMessage;
 var MessageType = protocol.MessageType;
 var serializeChatItem = protocol.serializeChatItem;
 var serializeMessageItem = protocol.serializeMessageItem;
+var serializeSettingsState = protocol.serializeSettingsState;
 var serializeSendResult = protocol.serializeSendResult;
 var SyncState = syncStateLib.SyncState;
 
@@ -87,9 +88,10 @@ function sendMessageItems(messages, index, onComplete, onError) {
 function sendChatList() {
   var payload = app.bootstrap();
   var chats = payload.chats || [];
+  var settingsState = app.getSettingsState();
 
   sendEnvelope(MessageType.syncStatus, "", 0, SyncState.syncing, function() {
-    sendEnvelope(MessageType.settingsState, app.getSettingsState().sendMode, 0, SyncState.syncing, function() {
+    sendEnvelope(MessageType.settingsState, serializeSettingsState(settingsState), 0, SyncState.syncing, function() {
       sendChatItems(
         chats,
         0,
@@ -176,7 +178,11 @@ function handleRequest(payload) {
     }
     case MessageType.toggleSendMode:
       app.setSendMode(payloadString);
-      sendEnvelope(MessageType.settingsState, app.getSettingsState().sendMode, 0, app.getSyncState());
+      sendEnvelope(MessageType.settingsState, serializeSettingsState(app.getSettingsState()), 0, app.getSyncState());
+      break;
+    case MessageType.toggleChatPreview:
+      app.setPreviewChatMessage(payloadString === "1" || payloadString === "true" || payloadString === "on");
+      sendEnvelope(MessageType.settingsState, serializeSettingsState(app.getSettingsState()), 0, app.getSyncState());
       break;
     case MessageType.clearCache:
       app.refreshStarted();
@@ -187,9 +193,15 @@ function handleRequest(payload) {
       break;
     case MessageType.logout:
       app.logout();
-      sendEnvelope(MessageType.settingsState, "preview", 0, SyncState.desynced, function() {
+      sendEnvelope(
+        MessageType.settingsState,
+        serializeSettingsState({ sendMode: "preview", previewChatMessage: false }),
+        0,
+        SyncState.desynced,
+        function() {
         sendEnvelope(MessageType.chatListComplete, "0", 0, SyncState.desynced);
-      });
+        }
+      );
       break;
     default:
       log("unhandled request", { type: type, payloadString: payloadString });

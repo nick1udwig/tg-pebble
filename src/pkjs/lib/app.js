@@ -90,6 +90,9 @@ function createPkjsApp(options) {
     setSendMode: function(sendMode) {
       return cache.setSettings({ sendMode: sendMode });
     },
+    setPreviewChatMessage: function(previewChatMessage) {
+      return cache.setSettings({ previewChatMessage: previewChatMessage === true });
+    },
     sendMessage: function(chatId, text) {
       var chatList;
       var messagePages;

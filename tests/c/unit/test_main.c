@@ -75,7 +75,7 @@ static void test_parse_message_item_payload(void) {
 
 static void test_parse_send_result_payload(void) {
   TgParsedSendResult result;
-  bool is_auto_send = false;
+  TgParsedSettingsState settings;
 
   ASSERT_TRUE(tg_parse_send_result_payload("ok", &result));
   ASSERT_TRUE(result.ok);
@@ -85,10 +85,13 @@ static void test_parse_send_result_payload(void) {
   ASSERT_TRUE(!result.ok);
   ASSERT_STREQ("Fixture transport rejected the message.", result.detail);
 
-  ASSERT_TRUE(tg_parse_send_mode_payload("auto", &is_auto_send));
-  ASSERT_TRUE(is_auto_send);
-  ASSERT_TRUE(tg_parse_send_mode_payload("preview", &is_auto_send));
-  ASSERT_TRUE(!is_auto_send);
+  ASSERT_TRUE(tg_parse_settings_state_payload("auto|1", &settings));
+  ASSERT_TRUE(settings.is_auto_send);
+  ASSERT_TRUE(settings.preview_chat_message);
+
+  ASSERT_TRUE(tg_parse_settings_state_payload("preview|0", &settings));
+  ASSERT_TRUE(!settings.is_auto_send);
+  ASSERT_TRUE(!settings.preview_chat_message);
 }
 
 int main(void) {

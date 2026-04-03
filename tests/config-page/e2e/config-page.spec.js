@@ -18,6 +18,7 @@ test("persists login details and send mode", async ({ page }) => {
   await page.fill("#login-code", "12345");
   await page.fill("#password", "hunter2");
   await page.check("#send-mode-auto");
+  await page.check("#preview-chat-message");
   await page.click("#save-login");
 
   await expect(page.locator("#status-banner")).toHaveText("Login details saved locally.");
@@ -30,6 +31,7 @@ test("persists login details and send mode", async ({ page }) => {
       loginCode: "12345",
       password: "hunter2",
       sendMode: "auto",
+      previewChatMessage: true,
     },
   });
 });
@@ -49,4 +51,3 @@ test("requires confirmation before clear cache and logout", async ({ page }) => 
   expect(submitted).toContainEqual({ action: "cache:clear" });
   expect(submitted).toContainEqual({ action: "auth:logout" });
 });
-

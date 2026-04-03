@@ -138,20 +138,32 @@ bool tg_parse_send_result_payload(const char *payload, TgParsedSendResult *out) 
   return true;
 }
 
-bool tg_parse_send_mode_payload(const char *payload, bool *is_auto_send) {
-  if (!payload || !is_auto_send) {
+bool tg_parse_settings_state_payload(const char *payload, TgParsedSettingsState *out) {
+  const char *cursor = payload;
+  char send_mode_buffer[16];
+  char preview_buffer[4];
+
+  if (!payload || !out) {
     return false;
   }
 
-  if (strcmp(payload, "auto") == 0) {
-    *is_auto_send = true;
+  if (!prv_next_field(&cursor, send_mode_buffer, sizeof(send_mode_buffer))) {
+    return false;
+  }
+
+  if (strcmp(send_mode_buffer, "auto") == 0) {
+    out->is_auto_send = true;
+  } else if (strcmp(send_mode_buffer, "preview") == 0) {
+    out->is_auto_send = false;
+  } else {
+    return false;
+  }
+
+  if (!prv_next_field(&cursor, preview_buffer, sizeof(preview_buffer))) {
+    out->preview_chat_message = false;
     return true;
   }
 
-  if (strcmp(payload, "preview") == 0) {
-    *is_auto_send = false;
-    return true;
-  }
-
-  return false;
+  out->preview_chat_message = prv_parse_bool_field(preview_buffer);
+  return true;
 }

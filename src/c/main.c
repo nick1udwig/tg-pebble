@@ -24,6 +24,7 @@
 #define TG_MSG_SYNC_STATUS "sync_status"
 #define TG_MSG_SETTINGS_STATE "settings_state"
 #define TG_MSG_TOGGLE_SEND_MODE "toggle_send_mode"
+#define TG_MSG_TOGGLE_CHAT_PREVIEW "toggle_chat_preview"
 #define TG_MSG_CLEAR_CACHE "clear_cache"
 #define TG_MSG_LOGOUT "logout"
 #define TG_MSG_SEND_MESSAGE "send_message"
@@ -53,17 +54,16 @@ static MenuLayer *s_chat_menu_layer;
 static MenuLayer *s_settings_menu_layer;
 static ScrollLayer *s_preview_scroll_layer;
 
-static TextLayer *s_chat_list_title_layer;
 static TextLayer *s_chat_list_sync_layer;
-static TextLayer *s_chat_list_footer_layer;
+static TextLayer *s_chat_list_settings_layer;
 
+static TextLayer *s_chat_back_layer;
 static TextLayer *s_chat_title_layer;
+static TextLayer *s_chat_mic_layer;
 static TextLayer *s_chat_sync_layer;
-static TextLayer *s_chat_footer_layer;
 
 static TextLayer *s_preview_title_layer;
 static TextLayer *s_preview_sync_layer;
-static TextLayer *s_preview_status_layer;
 static TextLayer *s_preview_text_layer;
 
 static TextLayer *s_settings_title_layer;
@@ -83,13 +83,19 @@ static size_t s_message_count = 0;
 static int32_t s_active_chat_id = -1;
 static char s_active_chat_title[TG_CHAT_TITLE_LENGTH] = "Chat";
 static char s_preview_text[TG_MESSAGE_TEXT_LENGTH] = "";
-static char s_preview_status[TG_STATUS_TEXT_LENGTH] = "Select to send";
+static char s_preview_status[TG_STATUS_TEXT_LENGTH] = "Tap Select to send";
+static char s_preview_display_text[TG_STATUS_TEXT_LENGTH + TG_MESSAGE_TEXT_LENGTH + 8] = "";
 static bool s_preview_send_error = false;
 static bool s_waiting_for_send_result = false;
 static bool s_send_mode_auto = false;
+static bool s_preview_chat_message = false;
 static bool s_has_received_inbox = false;
 static TgSyncStatus s_sync_status = TG_SYNC_STATUS_SYNCING;
+static AppTimer *s_sync_status_timer = NULL;
+static size_t s_sync_status_frame = 0;
 
+static void prv_update_sync_layers(void);
+static void prv_update_preview_contents(void);
 static void prv_request_chat_list(void);
 static void prv_request_chat_page(int32_t chat_id);
 static void prv_schedule_bootstrap(uint32_t delay_ms);
@@ -135,10 +141,12 @@ static void prv_copy_string(char *dest, size_t dest_size, const char *src) {
   (void)snprintf(dest, dest_size, "%s", src ? src : "");
 }
 
-static const char *prv_sync_glyph(TgSyncStatus status) {
-  switch (status) {
+static const char *prv_sync_glyph(void) {
+  static const char *spinner_frames[] = {"|", "/", "-", "\\"};
+
+  switch (s_sync_status) {
     case TG_SYNC_STATUS_SYNCING:
-      return "~";
+      return spinner_frames[s_sync_status_frame % ARRAY_LENGTH(spinner_frames)];
     case TG_SYNC_STATUS_SYNCED:
       return "+";
     case TG_SYNC_STATUS_DESYNCED:
@@ -147,8 +155,38 @@ static const char *prv_sync_glyph(TgSyncStatus status) {
   }
 }
 
+static void prv_sync_status_timer_callback(void *context) {
+  (void)context;
+  s_sync_status_timer = NULL;
+
+  if (s_sync_status != TG_SYNC_STATUS_SYNCING) {
+    return;
+  }
+
+  s_sync_status_frame += 1;
+  prv_update_sync_layers();
+  s_sync_status_timer = app_timer_register(220, prv_sync_status_timer_callback, NULL);
+}
+
+static void prv_sync_status_animation_start(void) {
+  if (s_sync_status != TG_SYNC_STATUS_SYNCING || s_sync_status_timer) {
+    return;
+  }
+
+  s_sync_status_timer = app_timer_register(220, prv_sync_status_timer_callback, NULL);
+}
+
+static void prv_sync_status_animation_stop(void) {
+  if (!s_sync_status_timer) {
+    return;
+  }
+
+  app_timer_cancel(s_sync_status_timer);
+  s_sync_status_timer = NULL;
+}
+
 static void prv_update_sync_layers(void) {
-  const char *glyph = prv_sync_glyph(s_sync_status);
+  const char *glyph = prv_sync_glyph();
 
   if (s_chat_list_sync_layer) {
     text_layer_set_text(s_chat_list_sync_layer, glyph);
@@ -171,62 +209,46 @@ static void prv_set_sync_status_from_string(const char *value) {
 
   if (strcmp(value, "syncing") == 0) {
     s_sync_status = TG_SYNC_STATUS_SYNCING;
+    prv_sync_status_animation_start();
   } else if (strcmp(value, "synced") == 0) {
     s_sync_status = TG_SYNC_STATUS_SYNCED;
+    prv_sync_status_animation_stop();
   } else {
     s_sync_status = TG_SYNC_STATUS_DESYNCED;
+    prv_sync_status_animation_stop();
   }
 
+  s_sync_status_frame = 0;
   prv_update_sync_layers();
 }
 
-static TextLayer *prv_create_title_layer(Layer *root_layer, GRect bounds, const char *title) {
-  TextLayer *layer = text_layer_create(GRect(6, 0, bounds.size.w - 26, TG_HEADER_HEIGHT));
-  text_layer_set_text(layer, title);
-  text_layer_set_font(layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
-  text_layer_set_background_color(layer, GColorClear);
-  text_layer_set_text_alignment(layer, GTextAlignmentLeft);
-  layer_add_child(root_layer, text_layer_get_layer(layer));
-  return layer;
-}
-
-static TextLayer *prv_create_sync_layer(Layer *root_layer, GRect bounds) {
-  TextLayer *layer = text_layer_create(GRect(bounds.size.w - 18, 0, 14, TG_HEADER_HEIGHT));
-  text_layer_set_text(layer, prv_sync_glyph(s_sync_status));
-  text_layer_set_font(layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
-  text_layer_set_background_color(layer, GColorClear);
-  text_layer_set_text_alignment(layer, GTextAlignmentRight);
-  layer_add_child(root_layer, text_layer_get_layer(layer));
-  return layer;
-}
-
-static TextLayer *prv_create_footer_layer(Layer *root_layer, GRect bounds, const char *text) {
-  TextLayer *layer =
-      text_layer_create(GRect(4, bounds.size.h - TG_FOOTER_HEIGHT, bounds.size.w - 8, TG_FOOTER_HEIGHT));
+static TextLayer *prv_create_label_layer(Layer *root_layer, GRect frame, const char *text, const char *font_key,
+                                         GTextAlignment alignment) {
+  TextLayer *layer = text_layer_create(frame);
   text_layer_set_text(layer, text);
-  text_layer_set_font(layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  text_layer_set_font(layer, fonts_get_system_font(font_key));
   text_layer_set_background_color(layer, GColorClear);
-  text_layer_set_text_alignment(layer, GTextAlignmentCenter);
+  text_layer_set_text_alignment(layer, alignment);
   layer_add_child(root_layer, text_layer_get_layer(layer));
   return layer;
 }
 
-static void prv_set_chat_footer_text(const char *text) {
-  if (s_chat_footer_layer) {
-    text_layer_set_text(s_chat_footer_layer, text);
-  }
+static TextLayer *prv_create_title_layer(Layer *root_layer, GRect frame, const char *title) {
+  return prv_create_label_layer(root_layer, frame, title, FONT_KEY_GOTHIC_18_BOLD, GTextAlignmentLeft);
+}
+
+static TextLayer *prv_create_sync_layer(Layer *root_layer, GRect frame) {
+  return prv_create_label_layer(root_layer, frame, prv_sync_glyph(), FONT_KEY_GOTHIC_18_BOLD, GTextAlignmentRight);
 }
 
 static void prv_set_preview_status(const char *text, bool is_error) {
-  prv_copy_string(s_preview_status, sizeof(s_preview_status), text);
-  s_preview_send_error = is_error;
-
-  if (s_preview_status_layer) {
-    text_layer_set_text(s_preview_status_layer, s_preview_status);
-#if defined(PBL_COLOR)
-    text_layer_set_text_color(s_preview_status_layer, is_error ? GColorRed : GColorDarkGray);
-#endif
+  if (!text) {
+    s_preview_status[0] = '\0';
+  } else if (text != s_preview_status) {
+    prv_copy_string(s_preview_status, sizeof(s_preview_status), text);
   }
+  s_preview_send_error = is_error;
+  prv_update_preview_contents();
 }
 
 static void prv_update_preview_contents(void) {
@@ -237,7 +259,16 @@ static void prv_update_preview_contents(void) {
     return;
   }
 
-  text_layer_set_text(s_preview_text_layer, s_preview_text);
+  if (s_preview_status[0] != '\0' && s_preview_text[0] != '\0') {
+    (void)snprintf(s_preview_display_text, sizeof(s_preview_display_text), "%s\n\n%s", s_preview_status,
+                   s_preview_text);
+  } else if (s_preview_status[0] != '\0') {
+    (void)snprintf(s_preview_display_text, sizeof(s_preview_display_text), "%s", s_preview_status);
+  } else {
+    (void)snprintf(s_preview_display_text, sizeof(s_preview_display_text), "%s", s_preview_text);
+  }
+
+  text_layer_set_text(s_preview_text_layer, s_preview_display_text);
   bounds = layer_get_bounds(scroll_layer_get_layer(s_preview_scroll_layer));
   text_size = text_layer_get_content_size(s_preview_text_layer);
   if (text_size.h < TG_PREVIEW_SCROLL_HEIGHT) {
@@ -393,14 +424,18 @@ static uint16_t prv_chat_list_get_num_rows(struct MenuLayer *menu_layer, uint16_
   (void)menu_layer;
   (void)section_index;
   (void)context;
-  return (uint16_t)(s_chat_count + 1);
+  return s_chat_count == 0 ? 1 : (uint16_t)s_chat_count;
 }
 
 static int16_t prv_chat_list_get_cell_height(struct MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
   (void)menu_layer;
-  (void)cell_index;
   (void)context;
-  return 44;
+
+  if (s_chat_count == 0) {
+    return 40;
+  }
+
+  return s_preview_chat_message && cell_index->row < (int)s_chat_count ? 44 : 28;
 }
 
 static void prv_chat_list_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
@@ -410,11 +445,6 @@ static void prv_chat_list_draw_row(GContext *ctx, const Layer *cell_layer, MenuI
   char unread_text[8];
 
   (void)context;
-
-  if (cell_index->row == 0) {
-    menu_cell_basic_draw(ctx, cell_layer, "Settings", s_send_mode_auto ? "Auto-send" : "Preview before send", NULL);
-    return;
-  }
 
   if (s_chat_count == 0) {
     menu_cell_basic_draw(ctx, cell_layer, "Loading chats", "Waiting for PKJS fixture data", NULL);
@@ -427,14 +457,16 @@ static void prv_chat_list_draw_row(GContext *ctx, const Layer *cell_layer, MenuI
   graphics_context_set_text_color(ctx, text_color);
 #endif
 
-  graphics_draw_text(ctx, s_chats[cell_index->row - 1].title, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+  graphics_draw_text(ctx, s_chats[cell_index->row].title, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      GRect(8, 2, bounds.size.w - 44, 18), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
                      NULL);
-  graphics_draw_text(ctx, s_chats[cell_index->row - 1].preview, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                     GRect(8, 20, bounds.size.w - 16, 18), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
-                     NULL);
+  if (s_preview_chat_message) {
+    graphics_draw_text(ctx, s_chats[cell_index->row].preview, fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                       GRect(8, 20, bounds.size.w - 16, 18), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
+                       NULL);
+  }
 
-  tg_format_unread_badge(s_chats[cell_index->row - 1].unread_count, unread_text, sizeof(unread_text));
+  tg_format_unread_badge(s_chats[cell_index->row].unread_count, unread_text, sizeof(unread_text));
   if (unread_text[0] != '\0') {
     graphics_draw_text(ctx, unread_text, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
                        GRect(bounds.size.w - 34, 4, 26, 14), GTextOverflowModeTrailingEllipsis,
@@ -445,16 +477,18 @@ static void prv_chat_list_draw_row(GContext *ctx, const Layer *cell_layer, MenuI
 static void prv_chat_list_select_click(struct MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
   (void)menu_layer;
   (void)context;
-  if (cell_index->row == 0) {
-    window_stack_push(s_settings_window, true);
-    return;
-  }
-
   if (s_chat_count == 0) {
     return;
   }
 
-  prv_push_chat_window_for_selected_row((uint16_t)(cell_index->row - 1));
+  prv_push_chat_window_for_selected_row((uint16_t)cell_index->row);
+}
+
+static void prv_chat_list_select_long_click(struct MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
+  (void)menu_layer;
+  (void)cell_index;
+  (void)context;
+  window_stack_push(s_settings_window, true);
 }
 
 static uint16_t prv_chat_get_num_rows(struct MenuLayer *menu_layer, uint16_t section_index, void *context) {
@@ -525,7 +559,7 @@ static uint16_t prv_settings_get_num_rows(struct MenuLayer *menu_layer, uint16_t
   (void)menu_layer;
   (void)section_index;
   (void)context;
-  return 3;
+  return 4;
 }
 
 static void prv_settings_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
@@ -537,9 +571,12 @@ static void prv_settings_draw_row(GContext *ctx, const Layer *cell_layer, MenuIn
       menu_cell_basic_draw(ctx, cell_layer, "Send mode", s_send_mode_auto ? "Auto-send" : "Preview", NULL);
       break;
     case 1:
-      menu_cell_basic_draw(ctx, cell_layer, "Clear cache", "Reset chats and messages", NULL);
+      menu_cell_basic_draw(ctx, cell_layer, "Chat preview", s_preview_chat_message ? "On" : "Off", NULL);
       break;
     case 2:
+      menu_cell_basic_draw(ctx, cell_layer, "Clear cache", "Reset chats and messages", NULL);
+      break;
+    case 3:
     default:
       menu_cell_basic_draw(ctx, cell_layer, "Logout", "Clear session and cache", NULL);
       break;
@@ -557,11 +594,19 @@ static void prv_settings_select_click(struct MenuLayer *menu_layer, MenuIndex *c
       menu_layer_reload_data(s_settings_menu_layer);
       break;
     case 1:
+      s_preview_chat_message = !s_preview_chat_message;
+      if (s_chat_list_menu_layer) {
+        menu_layer_reload_data(s_chat_list_menu_layer);
+      }
+      (void)prv_send_request(TG_MSG_TOGGLE_CHAT_PREVIEW, s_preview_chat_message ? "1" : "0");
+      menu_layer_reload_data(s_settings_menu_layer);
+      break;
+    case 2:
       prv_clear_chat_items();
       prv_clear_message_items();
       (void)prv_send_request(TG_MSG_CLEAR_CACHE, "");
       break;
-    case 2:
+    case 3:
     default:
       prv_clear_chat_items();
       prv_clear_message_items();
@@ -594,7 +639,10 @@ static void prv_preview_click_config_provider(void *context) {
 
 #if defined(PBL_MICROPHONE)
 static void prv_show_dictation_failure(void) {
-  prv_set_chat_footer_text("Dictation unavailable");
+  prv_copy_string(s_preview_text, sizeof(s_preview_text), "");
+  s_waiting_for_send_result = false;
+  prv_set_preview_status("Voice input unavailable", true);
+  prv_show_preview_window();
 }
 
 static void prv_dictation_callback(DictationSession *session, DictationSessionStatus status, char *transcription,
@@ -610,7 +658,7 @@ static void prv_dictation_callback(DictationSession *session, DictationSessionSt
   prv_copy_string(s_preview_text, sizeof(s_preview_text), transcription);
   s_preview_send_error = false;
   s_waiting_for_send_result = false;
-  prv_set_preview_status(s_send_mode_auto ? "Sending..." : "Select to send", false);
+  prv_set_preview_status(s_send_mode_auto ? "Sending..." : "Tap Select to send", false);
   prv_show_preview_window();
 
   if (s_send_mode_auto) {
@@ -627,7 +675,6 @@ static void prv_chat_select_click(struct MenuLayer *menu_layer, MenuIndex *cell_
     return;
   }
 
-  prv_set_chat_footer_text("Listening...");
   dictation_session_start(s_dictation_session);
 }
 #endif
@@ -635,18 +682,13 @@ static void prv_chat_select_click(struct MenuLayer *menu_layer, MenuIndex *cell_
 static void prv_chat_list_window_load(Window *window) {
   Layer *root_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(root_layer);
-  GRect menu_frame = GRect(0, TG_HEADER_HEIGHT, bounds.size.w, bounds.size.h - TG_HEADER_HEIGHT);
+  GRect menu_frame = GRect(0, 0, bounds.size.w, bounds.size.h - TG_FOOTER_HEIGHT);
 
-  s_chat_list_title_layer = prv_create_title_layer(root_layer, bounds, "Chats");
-  s_chat_list_sync_layer = prv_create_sync_layer(root_layer, bounds);
-
-  if (!prv_supports_microphone()) {
-    s_chat_list_footer_layer = prv_create_footer_layer(root_layer, bounds, "Read-only on this watch");
-    menu_frame.size.h -= TG_FOOTER_HEIGHT;
-  } else {
-    s_chat_list_footer_layer = prv_create_footer_layer(root_layer, bounds, "Top row: settings");
-    menu_frame.size.h -= TG_FOOTER_HEIGHT;
-  }
+  s_chat_list_sync_layer =
+      prv_create_sync_layer(root_layer, GRect(4, bounds.size.h - TG_FOOTER_HEIGHT - 1, 14, TG_FOOTER_HEIGHT));
+  s_chat_list_settings_layer = prv_create_label_layer(
+      root_layer, GRect(20, bounds.size.h - TG_FOOTER_HEIGHT, bounds.size.w - 24, TG_FOOTER_HEIGHT),
+      "Hold Sel: settings", FONT_KEY_GOTHIC_14, GTextAlignmentRight);
 
   s_chat_list_menu_layer = menu_layer_create(menu_frame);
   menu_layer_set_callbacks(s_chat_list_menu_layer, NULL,
@@ -655,6 +697,7 @@ static void prv_chat_list_window_load(Window *window) {
                                .get_cell_height = prv_chat_list_get_cell_height,
                                .draw_row = prv_chat_list_draw_row,
                                .select_click = prv_chat_list_select_click,
+                               .select_long_click = prv_chat_list_select_long_click,
                            });
   layer_add_child(root_layer, menu_layer_get_layer(s_chat_list_menu_layer));
   menu_layer_set_click_config_onto_window(s_chat_list_menu_layer, window);
@@ -663,29 +706,33 @@ static void prv_chat_list_window_load(Window *window) {
 static void prv_chat_list_window_unload(Window *window) {
   (void)window;
   menu_layer_destroy(s_chat_list_menu_layer);
-  text_layer_destroy(s_chat_list_title_layer);
   text_layer_destroy(s_chat_list_sync_layer);
-  text_layer_destroy(s_chat_list_footer_layer);
+  text_layer_destroy(s_chat_list_settings_layer);
   s_chat_list_menu_layer = NULL;
-  s_chat_list_title_layer = NULL;
   s_chat_list_sync_layer = NULL;
-  s_chat_list_footer_layer = NULL;
+  s_chat_list_settings_layer = NULL;
 }
 
 static void prv_chat_window_load(Window *window) {
   Layer *root_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(root_layer);
   GRect menu_frame = GRect(0, TG_HEADER_HEIGHT, bounds.size.w, bounds.size.h - TG_HEADER_HEIGHT);
+  int16_t mic_width = prv_supports_microphone() ? 18 : 0;
+  int16_t title_width = bounds.size.w - 18 - mic_width - 18 - 10;
 
-  s_chat_title_layer = prv_create_title_layer(root_layer, bounds, s_active_chat_title);
-  s_chat_sync_layer = prv_create_sync_layer(root_layer, bounds);
-
+  s_chat_back_layer =
+      prv_create_label_layer(root_layer, GRect(4, 1, 14, TG_HEADER_HEIGHT), "<", FONT_KEY_GOTHIC_18_BOLD,
+                             GTextAlignmentLeft);
+  s_chat_title_layer = prv_create_title_layer(root_layer, GRect(18, 0, title_width, TG_HEADER_HEIGHT),
+                                              s_active_chat_title);
   if (prv_supports_microphone()) {
-    s_chat_footer_layer = prv_create_footer_layer(root_layer, bounds, "Select: voice");
-    menu_frame.size.h -= TG_FOOTER_HEIGHT;
+    s_chat_mic_layer =
+        prv_create_label_layer(root_layer, GRect(bounds.size.w - 34, 1, 16, TG_HEADER_HEIGHT), "M",
+                               FONT_KEY_GOTHIC_18_BOLD, GTextAlignmentRight);
   } else {
-    s_chat_footer_layer = NULL;
+    s_chat_mic_layer = NULL;
   }
+  s_chat_sync_layer = prv_create_sync_layer(root_layer, GRect(bounds.size.w - 18, 0, 14, TG_HEADER_HEIGHT));
 
   s_chat_menu_layer = menu_layer_create(menu_frame);
   menu_layer_set_callbacks(s_chat_menu_layer, NULL,
@@ -704,37 +751,33 @@ static void prv_chat_window_load(Window *window) {
 static void prv_chat_window_unload(Window *window) {
   (void)window;
   menu_layer_destroy(s_chat_menu_layer);
+  text_layer_destroy(s_chat_back_layer);
   text_layer_destroy(s_chat_title_layer);
   text_layer_destroy(s_chat_sync_layer);
-  if (s_chat_footer_layer) {
-    text_layer_destroy(s_chat_footer_layer);
+  if (s_chat_mic_layer) {
+    text_layer_destroy(s_chat_mic_layer);
   }
   s_chat_menu_layer = NULL;
+  s_chat_back_layer = NULL;
   s_chat_title_layer = NULL;
+  s_chat_mic_layer = NULL;
   s_chat_sync_layer = NULL;
-  s_chat_footer_layer = NULL;
 }
 
 static void prv_preview_window_load(Window *window) {
   Layer *root_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(root_layer);
-  GRect status_frame = GRect(6, TG_HEADER_HEIGHT, bounds.size.w - 12, 16);
-  GRect scroll_frame = GRect(0, TG_HEADER_HEIGHT + 18, bounds.size.w, bounds.size.h - TG_HEADER_HEIGHT - 36);
+  GRect scroll_frame = GRect(0, TG_HEADER_HEIGHT + 4, bounds.size.w, bounds.size.h - TG_HEADER_HEIGHT - 8);
 
-  s_preview_title_layer = prv_create_title_layer(root_layer, bounds, "Preview");
-  s_preview_sync_layer = prv_create_sync_layer(root_layer, bounds);
-
-  s_preview_status_layer = text_layer_create(status_frame);
-  text_layer_set_font(s_preview_status_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
-  text_layer_set_background_color(s_preview_status_layer, GColorClear);
-  text_layer_set_text_alignment(s_preview_status_layer, GTextAlignmentCenter);
-  layer_add_child(root_layer, text_layer_get_layer(s_preview_status_layer));
+  s_preview_title_layer = prv_create_title_layer(root_layer, GRect(6, 0, bounds.size.w - 26, TG_HEADER_HEIGHT),
+                                                 "Preview");
+  s_preview_sync_layer = prv_create_sync_layer(root_layer, GRect(bounds.size.w - 18, 0, 14, TG_HEADER_HEIGHT));
 
   s_preview_scroll_layer = scroll_layer_create(scroll_frame);
   layer_add_child(root_layer, scroll_layer_get_layer(s_preview_scroll_layer));
 
   s_preview_text_layer = text_layer_create(GRect(8, 0, scroll_frame.size.w - 16, TG_PREVIEW_SCROLL_HEIGHT));
-  text_layer_set_font(s_preview_text_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24));
+  text_layer_set_font(s_preview_text_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
   text_layer_set_background_color(s_preview_text_layer, GColorClear);
   text_layer_set_overflow_mode(s_preview_text_layer, GTextOverflowModeWordWrap);
   scroll_layer_add_child(s_preview_scroll_layer, text_layer_get_layer(s_preview_text_layer));
@@ -749,12 +792,10 @@ static void prv_preview_window_unload(Window *window) {
   scroll_layer_destroy(s_preview_scroll_layer);
   text_layer_destroy(s_preview_title_layer);
   text_layer_destroy(s_preview_sync_layer);
-  text_layer_destroy(s_preview_status_layer);
   text_layer_destroy(s_preview_text_layer);
   s_preview_scroll_layer = NULL;
   s_preview_title_layer = NULL;
   s_preview_sync_layer = NULL;
-  s_preview_status_layer = NULL;
   s_preview_text_layer = NULL;
 }
 
@@ -763,8 +804,9 @@ static void prv_settings_window_load(Window *window) {
   GRect bounds = layer_get_bounds(root_layer);
   GRect menu_frame = GRect(0, TG_HEADER_HEIGHT, bounds.size.w, bounds.size.h - TG_HEADER_HEIGHT);
 
-  s_settings_title_layer = prv_create_title_layer(root_layer, bounds, "Settings");
-  s_settings_sync_layer = prv_create_sync_layer(root_layer, bounds);
+  s_settings_title_layer = prv_create_title_layer(root_layer, GRect(6, 0, bounds.size.w - 26, TG_HEADER_HEIGHT),
+                                                  "Settings");
+  s_settings_sync_layer = prv_create_sync_layer(root_layer, GRect(bounds.size.w - 18, 0, 14, TG_HEADER_HEIGHT));
 
   s_settings_menu_layer = menu_layer_create(menu_frame);
   menu_layer_set_callbacks(s_settings_menu_layer, NULL,
@@ -836,11 +878,15 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
   }
 
   if (strcmp(type, TG_MSG_SETTINGS_STATE) == 0) {
-    bool is_auto = false;
-    if (tg_parse_send_mode_payload(payload, &is_auto)) {
-      s_send_mode_auto = is_auto;
+    TgParsedSettingsState parsed;
+    if (tg_parse_settings_state_payload(payload, &parsed)) {
+      s_send_mode_auto = parsed.is_auto_send;
+      s_preview_chat_message = parsed.preview_chat_message;
       if (s_settings_menu_layer) {
         menu_layer_reload_data(s_settings_menu_layer);
+      }
+      if (s_chat_list_menu_layer) {
+        menu_layer_reload_data(s_chat_list_menu_layer);
       }
     }
     return;
@@ -874,6 +920,9 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
     }
     if (s_chat_list_menu_layer) {
       menu_layer_reload_data(s_chat_list_menu_layer);
+      if (s_chat_count > 0) {
+        menu_layer_set_selected_index(s_chat_list_menu_layer, MenuIndex(0, 0), MenuRowAlignTop, false);
+      }
     }
     return;
   }
@@ -918,9 +967,6 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
       prv_copy_string(s_preview_text, sizeof(s_preview_text), "");
       if (window_stack_contains_window(s_preview_window)) {
         window_stack_remove(s_preview_window, true);
-      }
-      if (prv_supports_microphone()) {
-        prv_set_chat_footer_text("Select: voice");
       }
     } else {
       prv_set_preview_status(parsed.detail, true);
@@ -975,6 +1021,7 @@ static void prv_deinit(void) {
   if (s_bootstrap_timer) {
     app_timer_cancel(s_bootstrap_timer);
   }
+  prv_sync_status_animation_stop();
 
 #if defined(PBL_MICROPHONE)
   if (s_dictation_session) {

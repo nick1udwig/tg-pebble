@@ -211,6 +211,7 @@ This now performs a real smoke pass:
 - injects `Down` and `Select`
 - captures the first chat view
 - starts `pebble transcribe`
+- captures the dictation listening screen
 - captures the dictation preview window
 - sends the previewed message
 - captures the updated chat view
@@ -219,6 +220,7 @@ Artifacts are written to:
 
 - `tests/emulator/artifacts/chat-list.png`
 - `tests/emulator/artifacts/chat-open.png`
+- `tests/emulator/artifacts/dictation-listening.png`
 - `tests/emulator/artifacts/dictation-preview.png`
 - `tests/emulator/artifacts/dictation-sent.png`
 

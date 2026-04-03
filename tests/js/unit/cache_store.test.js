@@ -19,14 +19,15 @@ function createMemoryStorage() {
 }
 
 describe("createCacheStore", () => {
-  it("persists settings with preview as the default send mode", () => {
+  it("persists settings with preview-off chat rows by default", () => {
     const store = createCacheStore(createMemoryStorage());
 
-    expect(store.getSettings()).toEqual({ sendMode: "preview" });
+    expect(store.getSettings()).toEqual({ sendMode: "preview", previewChatMessage: false });
 
     store.setSettings({ sendMode: "auto" });
+    store.setSettings({ previewChatMessage: true });
 
-    expect(store.getSettings()).toEqual({ sendMode: "auto" });
+    expect(store.getSettings()).toEqual({ sendMode: "auto", previewChatMessage: true });
   });
 
   it("clears chats and message pages without deleting the session", () => {
@@ -43,4 +44,3 @@ describe("createCacheStore", () => {
     expect(store.getMessagePages()).toEqual({});
   });
 });
-

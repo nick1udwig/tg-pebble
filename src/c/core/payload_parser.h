@@ -29,7 +29,12 @@ typedef struct {
   char detail[TG_STATUS_TEXT_LENGTH];
 } TgParsedSendResult;
 
+typedef struct {
+  bool is_auto_send;
+  bool preview_chat_message;
+} TgParsedSettingsState;
+
 bool tg_parse_chat_item_payload(const char *payload, TgParsedChatItem *out);
 bool tg_parse_message_item_payload(const char *payload, TgParsedMessageItem *out);
 bool tg_parse_send_result_payload(const char *payload, TgParsedSendResult *out);
-bool tg_parse_send_mode_payload(const char *payload, bool *is_auto_send);
+bool tg_parse_settings_state_payload(const char *payload, TgParsedSettingsState *out);

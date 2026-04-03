@@ -12,6 +12,7 @@ var MessageType = Object.freeze({
   syncStatus: "sync_status",
   settingsState: "settings_state",
   toggleSendMode: "toggle_send_mode",
+  toggleChatPreview: "toggle_chat_preview",
   clearCache: "clear_cache",
   logout: "logout",
   sendMessage: "send_message",
@@ -101,6 +102,10 @@ function serializeSendResult(result) {
   return "error|" + sanitizeField(result.detail || "");
 }
 
+function serializeSettingsState(settings) {
+  return [sanitizeField(settings.sendMode), settings.previewChatMessage ? "1" : "0"].join("|");
+}
+
 module.exports = {
   AppMessageKey: AppMessageKey,
   MessageType: MessageType,
@@ -109,5 +114,6 @@ module.exports = {
   encodeMessage: encodeMessage,
   serializeChatItem: serializeChatItem,
   serializeMessageItem: serializeMessageItem,
+  serializeSettingsState: serializeSettingsState,
   serializeSendResult: serializeSendResult
 };

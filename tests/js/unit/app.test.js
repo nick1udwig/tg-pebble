@@ -33,11 +33,12 @@ describe("createPkjsApp", () => {
   it("persists send mode updates in the cache", () => {
     const app = createPkjsApp({ storage: createMemoryStorage() });
 
-    expect(app.getSettingsState()).toEqual({ sendMode: "preview" });
+    expect(app.getSettingsState()).toEqual({ sendMode: "preview", previewChatMessage: false });
 
+    app.setPreviewChatMessage(true);
     app.setSendMode("auto");
 
-    expect(app.getSettingsState()).toEqual({ sendMode: "auto" });
+    expect(app.getSettingsState()).toEqual({ sendMode: "auto", previewChatMessage: true });
   });
 
   it("appends a fixture outgoing message on successful send", () => {
