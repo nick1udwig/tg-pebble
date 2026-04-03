@@ -34,6 +34,8 @@ function parseInteger(value) {
 function loadTelegramTestEnv(env) {
   var source = env || process.env;
   var apiId = parseInteger(source.TG_API_ID);
+  var forceDcId = parseInteger(source.TG_TEST_FORCE_DC_ID);
+  var forcePort = parseInteger(source.TG_TEST_FORCE_PORT);
   var missing = [];
   var errors = [];
   var key;
@@ -86,6 +88,9 @@ function loadTelegramTestEnv(env) {
     reconnectRetries: Number.isFinite(parseInteger(source.TG_TEST_RECONNECT_RETRIES))
       ? parseInteger(source.TG_TEST_RECONNECT_RETRIES)
       : 0,
+    forceDcId: Number.isFinite(forceDcId) ? forceDcId : null,
+    forceServerAddress: String(source.TG_TEST_FORCE_SERVER_ADDRESS || ""),
+    forcePort: Number.isFinite(forcePort) ? forcePort : null,
     missing: Array.from(new Set(missing)),
     errors: errors
   };
@@ -97,6 +102,7 @@ function canRunTelegramTestEnv(config) {
 
 function createTelegramTestClient(config, sessionString) {
   var savedSession = sessionString || "";
+  var client;
 
   if (!Number.isFinite(config.apiId)) {
     throw new Error("TG_API_ID must be set to a valid integer.");
@@ -106,13 +112,32 @@ function createTelegramTestClient(config, sessionString) {
     throw new Error("TG_API_HASH must be set.");
   }
 
-  return new TelegramClient(new StringSession(savedSession), config.apiId, config.apiHash, {
+  client = new TelegramClient(new StringSession(savedSession), config.apiId, config.apiHash, {
     connectionRetries: config.connectionRetries,
     requestRetries: config.requestRetries,
     reconnectRetries: config.reconnectRetries,
     useWSS: config.useWSS,
     testServers: config.testServers
   });
+
+  if (config.forceDcId && config.forceServerAddress && config.forcePort) {
+    var originalGetDc = client.getDC.bind(client);
+
+    client.session.setDC(config.forceDcId, config.forceServerAddress, config.forcePort);
+    client.getDC = async function(dcId, downloadDC, web) {
+      if (dcId === config.forceDcId && !downloadDC && !web) {
+        return {
+          id: config.forceDcId,
+          ipAddress: config.forceServerAddress,
+          port: config.forcePort
+        };
+      }
+
+      return originalGetDc(dcId, downloadDC, web);
+    };
+  }
+
+  return client;
 }
 
 async function loginTelegramTestUser(client, config) {
