@@ -1,0 +1,24 @@
+{
+  "name": "tg-pebble",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Telegram client for Pebble with PKJS, local cache, and watch-side UI.",
+  "scripts": {
+    "test": "npm run test:js && npm run test:c && npm run test:config",
+    "test:js": "bash scripts/test-js.sh",
+    "test:c": "bash scripts/test-c.sh",
+    "test:config": "bash scripts/test-config.sh",
+    "test:emulator": "bash scripts/test-emulator.sh",
+    "dev:config": "node scripts/serve-config-page.mjs --port 4173",
+    "capture:baselines": "bash scripts/capture-baselines.sh",
+    "review:visual": "bash scripts/review-visual-diffs.sh"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.53.0",
+    "pixelmatch": "^7.1.0",
+    "pngjs": "^7.0.0",
+    "vitest": "^3.2.4"
+  }
+}
+

@@ -1,0 +1,19 @@
+{
+  "type": "chat_list_page",
+  "syncState": "synced",
+  "chats": [
+    {
+      "id": 1001,
+      "title": "Alice",
+      "preview": "See you soon",
+      "unreadCount": 2
+    },
+    {
+      "id": 2001,
+      "title": "Weekend Group",
+      "preview": "Bob: brunch at 10?",
+      "unreadCount": 11
+    }
+  ]
+}
+

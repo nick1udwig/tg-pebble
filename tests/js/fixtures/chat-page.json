@@ -1,0 +1,23 @@
+{
+  "type": "chat_page",
+  "syncState": "synced",
+  "chatId": 2001,
+  "hasOlder": true,
+  "messages": [
+    {
+      "id": 1,
+      "senderId": 44,
+      "senderName": "Alice",
+      "text": "Morning",
+      "showSender": true
+    },
+    {
+      "id": 2,
+      "senderId": 44,
+      "senderName": "Alice",
+      "text": "Still on for brunch?",
+      "showSender": false
+    }
+  ]
+}
+

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TG Pebble Config</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <p class="eyebrow">TG Pebble</p>
+        <h1>Config</h1>
+        <p class="lede">Telegram session, send mode, cache clearing, and logout live here.</p>
+      </header>
+
+      <section class="card">
+        <h2>Login</h2>
+        <label for="phone-number">Phone number</label>
+        <input id="phone-number" name="phone-number" type="tel" placeholder="+15551234567" />
+
+        <label for="login-code">Login code</label>
+        <input id="login-code" name="login-code" type="text" placeholder="12345" />
+
+        <label for="password">2FA password</label>
+        <input id="password" name="password" type="password" placeholder="Optional" />
+
+        <button id="save-login" class="primary" type="button">Save Login</button>
+      </section>
+
+      <section class="card">
+        <h2>Send Mode</h2>
+        <label class="choice">
+          <input id="send-mode-preview" type="radio" name="send-mode" value="preview" checked />
+          <span>Preview before send</span>
+        </label>
+        <label class="choice">
+          <input id="send-mode-auto" type="radio" name="send-mode" value="auto" />
+          <span>Auto-send after dictation</span>
+        </label>
+      </section>
+
+      <section class="card actions">
+        <h2>Danger Zone</h2>
+        <div class="action-row">
+          <button id="clear-cache" type="button">Clear Cache</button>
+          <button id="confirm-clear-cache" class="danger hidden" type="button">Confirm Clear Cache</button>
+        </div>
+        <div class="action-row">
+          <button id="logout" type="button">Logout</button>
+          <button id="confirm-logout" class="danger hidden" type="button">Confirm Logout</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Status</h2>
+        <p id="status-banner" class="status">Idle</p>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
+
