@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "../../../src/c/core/message_grouping.h"
+#include "../../../src/c/core/payload_parser.h"
 #include "../../../src/c/core/sync_status.h"
 #include "../../../src/c/core/unread_badge.h"
 
@@ -52,10 +53,51 @@ static void test_sync_status_label(void) {
   ASSERT_STREQ("desynced", tg_sync_status_label(TG_SYNC_STATUS_DESYNCED));
 }
 
+static void test_parse_chat_item_payload(void) {
+  TgParsedChatItem item;
+
+  ASSERT_TRUE(tg_parse_chat_item_payload("1001|Alice|See you soon|2", &item));
+  ASSERT_TRUE(item.chat_id == 1001);
+  ASSERT_TRUE(item.unread_count == 2);
+  ASSERT_STREQ("Alice", item.title);
+  ASSERT_STREQ("See you soon", item.preview);
+}
+
+static void test_parse_message_item_payload(void) {
+  TgParsedMessageItem item;
+
+  ASSERT_TRUE(tg_parse_message_item_payload("Alice|1|0|Morning", &item));
+  ASSERT_TRUE(item.show_sender);
+  ASSERT_TRUE(!item.outgoing);
+  ASSERT_STREQ("Alice", item.sender);
+  ASSERT_STREQ("Morning", item.text);
+}
+
+static void test_parse_send_result_payload(void) {
+  TgParsedSendResult result;
+  bool is_auto_send = false;
+
+  ASSERT_TRUE(tg_parse_send_result_payload("ok", &result));
+  ASSERT_TRUE(result.ok);
+  ASSERT_STREQ("Sent.", result.detail);
+
+  ASSERT_TRUE(tg_parse_send_result_payload("error|Fixture transport rejected the message.", &result));
+  ASSERT_TRUE(!result.ok);
+  ASSERT_STREQ("Fixture transport rejected the message.", result.detail);
+
+  ASSERT_TRUE(tg_parse_send_mode_payload("auto", &is_auto_send));
+  ASSERT_TRUE(is_auto_send);
+  ASSERT_TRUE(tg_parse_send_mode_payload("preview", &is_auto_send));
+  ASSERT_TRUE(!is_auto_send);
+}
+
 int main(void) {
   test_should_show_sender();
   test_format_unread_badge();
   test_sync_status_label();
+  test_parse_chat_item_payload();
+  test_parse_message_item_payload();
+  test_parse_send_result_payload();
 
   if (s_failures > 0) {
     fprintf(stderr, "%d C test(s) failed.\n", s_failures);
@@ -65,4 +107,3 @@ int main(void) {
   puts("C tests passed.");
   return EXIT_SUCCESS;
 }
-

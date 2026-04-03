@@ -1,8 +1,8 @@
-const PLACEHOLDERS = Object.freeze({
+var PLACEHOLDERS = Object.freeze({
   photo: "Photo",
   sticker: "Sticker",
   voice: "Voice message",
-  file: "File",
+  file: "File"
 });
 
 export function toDisplayText(message) {
@@ -14,6 +14,5 @@ export function toDisplayText(message) {
     return message.text.trim();
   }
 
-  return PLACEHOLDERS[message.kind] ?? "Unsupported message";
+  return PLACEHOLDERS[message.kind] || "Unsupported message";
 }
-

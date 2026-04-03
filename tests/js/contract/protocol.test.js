@@ -3,7 +3,15 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { buildChatListPagePayload, buildChatPagePayload, encodeMessage, MessageType } from "../../../src/pkjs/lib/protocol.js";
+import {
+  buildChatListPagePayload,
+  buildChatPagePayload,
+  encodeMessage,
+  MessageType,
+  serializeChatItem,
+  serializeMessageItem,
+  serializeSendResult,
+} from "../../../src/pkjs/lib/protocol.js";
 import { addSenderRunMetadata } from "../../../src/pkjs/lib/message_groups.js";
 
 function readFixture(name) {
@@ -47,14 +55,28 @@ describe("watch/pkjs protocol fixtures", () => {
   });
 
   it("encodes payloads into the compact AppMessage envelope", () => {
-    const encoded = encodeMessage(MessageType.chatListPage, { syncState: "synced", chats: [] }, 42);
+    const encoded = encodeMessage(MessageType.chatItem, "1001|Alice|See you soon|2", 42, "synced");
 
     expect(encoded).toEqual({
-      0: "chat_list_page",
-      1: "{\"syncState\":\"synced\",\"chats\":[]}",
+      0: "chat_item",
+      1: "1001|Alice|See you soon|2",
       2: 42,
       3: "synced",
     });
   });
-});
 
+  it("serializes chat rows, message rows, and send results", () => {
+    expect(
+      serializeChatItem({ id: 1001, title: "Alice", preview: "See you soon", unreadCount: 2 }),
+    ).toBe("1001|Alice|See you soon|2");
+
+    expect(
+      serializeMessageItem({ senderName: "Alice", showSender: true, outgoing: false, text: "Morning" }),
+    ).toBe("Alice|1|0|Morning");
+
+    expect(serializeSendResult({ ok: true })).toBe("ok");
+    expect(serializeSendResult({ ok: false, detail: "Fixture transport rejected the message." })).toBe(
+      "error|Fixture transport rejected the message.",
+    );
+  });
+});

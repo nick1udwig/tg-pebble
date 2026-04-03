@@ -444,6 +444,39 @@ Workaround:
 - use `scripts/run-emulator.sh` for interactive headless development
 - treat persistent headless emulator orchestration as future harness work
 
+### 6.7 Headless Emulator PKJS Bridge Was Not Reliable
+
+Problem:
+
+- the watch app launched correctly in the headless emulator
+- native watch-side logs and screenshots worked
+- but the default phone-simulator path behind `pebble install --emulator ... --logs` did not deliver PKJS `AppMessage` replies in this environment
+
+Observed behavior:
+
+- the watch sent repeated bootstrap requests such as `app_ready`
+- no inbound PKJS messages reached the watch
+- the watch shell remained on its local loading state even though the PKJS bundle was present in the `.pbw`
+
+What was verified:
+
+- the multi-file PKJS bundle is now built through `package.json` `pebble.enableMultiJS`
+- the SDK successfully emits `build/pebble-js-app.js`
+- the watch app installs and stays alive in the emulator
+- watch-side screenshots such as `build/tests/live-shell.png` can be captured from that live session
+
+Current workaround:
+
+- use the emulator to validate the native watch shell, layout, and navigation scaffolding
+- use JS unit tests to validate PKJS behavior deterministically
+- treat end-to-end PKJS-in-emulator validation as pending follow-up work
+
+Likely next investigation:
+
+- try the direct QEMU path with `--qemu ... --pypkjs --platform <platform>`
+- compare behavior in a desktop session versus the current headless shell
+- inspect whether the default phone simulator path is dropping messages before PKJS `ready`
+
 ## 7. Practical Command Summary
 
 ### Initial Machine Setup
@@ -502,4 +535,6 @@ As of this runbook:
 - `npm run test:c` is working
 - `npm run test:config` is working
 - one-shot headless `pebble screenshot` capture is working
+- the headless emulator launches the native watch shell successfully
+- PKJS logic is covered by JS tests, but end-to-end PKJS delivery inside the headless emulator remains unresolved
 - persistent headless emulator reconnection remains a known limitation and should be handled by a future automation harness

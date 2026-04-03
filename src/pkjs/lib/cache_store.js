@@ -1,24 +1,52 @@
-export const CACHE_KEYS = Object.freeze({
+export var CACHE_KEYS = Object.freeze({
   session: "session",
   settings: "settings",
   chatList: "chat_list",
   messagePages: "message_pages",
-  syncCheckpoint: "sync_checkpoint",
+  syncCheckpoint: "sync_checkpoint"
 });
 
-const DEFAULT_SETTINGS = Object.freeze({
-  sendMode: "preview",
+var DEFAULT_SETTINGS = Object.freeze({
+  sendMode: "preview"
 });
 
-export function createCacheStore(storage, options = {}) {
-  const prefix = options.prefix ?? "tg_pebble";
+function mergeSettings(settings) {
+  var merged = {
+    sendMode: DEFAULT_SETTINGS.sendMode
+  };
+  var key;
 
-  function getKey(key) {
-    return `${prefix}:${key}`;
+  settings = settings || {};
+
+  for (key in settings) {
+    if (Object.prototype.hasOwnProperty.call(settings, key)) {
+      merged[key] = settings[key];
+    }
   }
 
-  function getJson(key, fallback = null) {
-    const raw = storage.getItem(getKey(key));
+  return merged;
+}
+
+export function createCacheStore(storage, options) {
+  var prefix = "tg_pebble";
+
+  options = options || {};
+  if (options.prefix) {
+    prefix = options.prefix;
+  }
+
+  function getKey(key) {
+    return prefix + ":" + key;
+  }
+
+  function getJson(key, fallback) {
+    var raw;
+
+    if (fallback === undefined) {
+      fallback = null;
+    }
+
+    raw = storage.getItem(getKey(key));
 
     if (!raw) {
       return fallback;
@@ -41,47 +69,44 @@ export function createCacheStore(storage, options = {}) {
   }
 
   return {
-    getJson,
-    setJson,
-    remove,
-    getSession() {
+    getJson: getJson,
+    setJson: setJson,
+    remove: remove,
+    getSession: function() {
       return getJson(CACHE_KEYS.session, null);
     },
-    setSession(session) {
+    setSession: function(session) {
       return setJson(CACHE_KEYS.session, session);
     },
-    getSettings() {
-      return {
-        ...DEFAULT_SETTINGS,
-        ...getJson(CACHE_KEYS.settings, {}),
-      };
+    getSettings: function() {
+      return mergeSettings(getJson(CACHE_KEYS.settings, {}));
     },
-    setSettings(settings) {
-      return setJson(CACHE_KEYS.settings, {
-        ...DEFAULT_SETTINGS,
-        ...settings,
-      });
+    setSettings: function(settings) {
+      return setJson(CACHE_KEYS.settings, mergeSettings(settings));
     },
-    getChatList() {
+    getChatList: function() {
       return getJson(CACHE_KEYS.chatList, []);
     },
-    setChatList(chats) {
+    setChatList: function(chats) {
       return setJson(CACHE_KEYS.chatList, chats);
     },
-    getMessagePages() {
+    getMessagePages: function() {
       return getJson(CACHE_KEYS.messagePages, {});
     },
-    setMessagePages(pages) {
+    setMessagePages: function(pages) {
       return setJson(CACHE_KEYS.messagePages, pages);
     },
-    clearChatsAndMessages() {
+    clearChatsAndMessages: function() {
       remove(CACHE_KEYS.chatList);
       remove(CACHE_KEYS.messagePages);
       remove(CACHE_KEYS.syncCheckpoint);
     },
-    clearAll() {
-      Object.values(CACHE_KEYS).forEach(remove);
-    },
+    clearAll: function() {
+      remove(CACHE_KEYS.session);
+      remove(CACHE_KEYS.settings);
+      remove(CACHE_KEYS.chatList);
+      remove(CACHE_KEYS.messagePages);
+      remove(CACHE_KEYS.syncCheckpoint);
+    }
   };
 }
-

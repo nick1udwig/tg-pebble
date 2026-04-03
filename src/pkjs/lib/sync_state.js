@@ -1,18 +1,24 @@
-export const SyncState = Object.freeze({
+export var SyncState = Object.freeze({
   syncing: "syncing",
   synced: "synced",
-  desynced: "desynced",
+  desynced: "desynced"
 });
 
-export const SyncEvent = Object.freeze({
+export var SyncEvent = Object.freeze({
   refreshStart: "refresh_start",
   refreshSuccess: "refresh_success",
   refreshError: "refresh_error",
-  connectionLost: "connection_lost",
+  connectionLost: "connection_lost"
 });
 
-export function reduceSyncState(currentState = SyncState.desynced, event) {
-  switch (event?.type) {
+export function reduceSyncState(currentState, event) {
+  var eventType = event && event.type ? event.type : null;
+
+  if (!currentState) {
+    currentState = SyncState.desynced;
+  }
+
+  switch (eventType) {
     case SyncEvent.refreshStart:
       return SyncState.syncing;
     case SyncEvent.refreshSuccess:
@@ -24,4 +30,3 @@ export function reduceSyncState(currentState = SyncState.desynced, event) {
       return currentState;
   }
 }
-
