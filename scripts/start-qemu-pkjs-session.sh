@@ -4,6 +4,7 @@ set -euo pipefail
 platform="${1:-basalt}"
 pbw_path="${2:-build/tg-pebble.pbw}"
 session_file="${3:-build/tests/emulator-session.json}"
+persist_dir_override="${4:-}"
 
 if ! command -v pebble >/dev/null 2>&1; then
   echo "pebble-tool is not installed or not on PATH." >&2
@@ -19,7 +20,7 @@ sdk_root="/root/.pebble-sdk/SDKs/current"
 sdk_version="$(basename "$(readlink -f "${sdk_root}")")"
 sdk_core_dir="${sdk_root}/sdk-core"
 toolchain_dir="${sdk_root}/toolchain"
-persist_dir="/root/.pebble-sdk/${sdk_version}/${platform}"
+persist_dir="${persist_dir_override:-/root/.pebble-sdk/${sdk_version}/${platform}}"
 spi_flash="${persist_dir}/qemu_spi_flash.bin"
 micro_flash="${sdk_core_dir}/pebble/${platform}/qemu/qemu_micro_flash.bin"
 spi_flash_bz2="${sdk_core_dir}/pebble/${platform}/qemu/qemu_spi_flash.bin.bz2"
@@ -204,6 +205,7 @@ from pathlib import Path
 session = {
     "platform": "${platform}",
     "sdk_version": "${sdk_version}",
+    "persist_dir": "${persist_dir}",
     "qemu_pid": int("${qemu_pid}"),
     "pkjs_pid": int("${pkjs_pid}"),
     "qemu_port": int("${qemu_port}"),

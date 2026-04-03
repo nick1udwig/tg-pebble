@@ -205,15 +205,22 @@ This now performs a real smoke pass:
 - builds the app
 - starts a manual `qemu-pebble` session under `xvfb-run`
 - starts a long-lived `pypkjs` sidecar against that QEMU instance
+- uses an isolated per-run persist directory so PKJS settings and watch state do not leak across test runs
 - installs the app through the pypkjs websocket path
 - captures the chat list
 - injects `Down` and `Select`
 - captures the first chat view
+- starts `pebble transcribe`
+- captures the dictation preview window
+- sends the previewed message
+- captures the updated chat view
 
 Artifacts are written to:
 
 - `tests/emulator/artifacts/chat-list.png`
 - `tests/emulator/artifacts/chat-open.png`
+- `tests/emulator/artifacts/dictation-preview.png`
+- `tests/emulator/artifacts/dictation-sent.png`
 
 ### 4.7 Run The Emulator Manually
 
@@ -238,6 +245,14 @@ This is still useful for quick manual inspection, but the more reliable headless
 ```bash
 bash scripts/start-qemu-pkjs-session.sh basalt build/tg-pebble.pbw build/tests/emulator-session.json
 ```
+
+Optional fourth argument:
+
+```bash
+bash scripts/start-qemu-pkjs-session.sh basalt build/tg-pebble.pbw build/tests/emulator-session.json build/tests/emulator-persist
+```
+
+Use that when you want an isolated PKJS/watch persistence directory instead of the default SDK persist path.
 
 That script:
 
