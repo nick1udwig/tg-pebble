@@ -7,3 +7,5 @@ test-results/
 tests/emulator/artifacts/*
 .DS_Store
 .lock-waf_linux_build
+.codex
+.env.telegram.test.local

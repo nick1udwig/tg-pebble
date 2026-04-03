@@ -168,7 +168,46 @@ npm run test:config
 
 This starts the local config-page server and executes the Playwright suite against it.
 
-### 4.4 Full Non-Emulator Test Pass
+### 4.4 Telegram Test Environment Integration
+
+Run:
+
+```bash
+npm run test:telegram
+```
+
+This suite is opt-in and talks to Telegram's official test environment.
+
+It only runs when all required environment variables are set and `TG_TEST_ENABLE=1`.
+
+Required variables:
+
+- `TG_API_ID`
+- `TG_API_HASH`
+- `TG_TEST_PHONE`
+- `TG_TEST_CODE`
+
+Optional variables:
+
+- `TG_TEST_PASSWORD`
+- `TG_TEST_USE_WSS`
+- `TG_TEST_SERVERS`
+
+An example file is provided at:
+
+- `.env.telegram.test.example`
+
+Get app credentials from:
+
+- `https://my.telegram.org`
+- then `API development tools`
+
+Reference docs:
+
+- `https://core.telegram.org/api/obtaining_api_id`
+- `https://core.telegram.org/api/auth`
+
+### 4.5 Full Non-Emulator Test Pass
 
 Run:
 
