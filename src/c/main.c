@@ -138,9 +138,9 @@ static void prv_copy_string(char *dest, size_t dest_size, const char *src) {
 static const char *prv_sync_glyph(TgSyncStatus status) {
   switch (status) {
     case TG_SYNC_STATUS_SYNCING:
-      return "...";
+      return "~";
     case TG_SYNC_STATUS_SYNCED:
-      return "OK";
+      return "+";
     case TG_SYNC_STATUS_DESYNCED:
     default:
       return "!";
@@ -181,7 +181,7 @@ static void prv_set_sync_status_from_string(const char *value) {
 }
 
 static TextLayer *prv_create_title_layer(Layer *root_layer, GRect bounds, const char *title) {
-  TextLayer *layer = text_layer_create(GRect(6, 0, bounds.size.w - 40, TG_HEADER_HEIGHT));
+  TextLayer *layer = text_layer_create(GRect(6, 0, bounds.size.w - 26, TG_HEADER_HEIGHT));
   text_layer_set_text(layer, title);
   text_layer_set_font(layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
   text_layer_set_background_color(layer, GColorClear);
@@ -191,7 +191,7 @@ static TextLayer *prv_create_title_layer(Layer *root_layer, GRect bounds, const 
 }
 
 static TextLayer *prv_create_sync_layer(Layer *root_layer, GRect bounds) {
-  TextLayer *layer = text_layer_create(GRect(bounds.size.w - 32, 0, 28, TG_HEADER_HEIGHT));
+  TextLayer *layer = text_layer_create(GRect(bounds.size.w - 18, 0, 14, TG_HEADER_HEIGHT));
   text_layer_set_text(layer, prv_sync_glyph(s_sync_status));
   text_layer_set_font(layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
   text_layer_set_background_color(layer, GColorClear);

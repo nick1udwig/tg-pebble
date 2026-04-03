@@ -192,7 +192,30 @@ pebble build
 
 This should build the app for the configured rectangular platforms and emit a `.pbw` bundle into `build/`.
 
-### 4.6 Run The Emulator
+### 4.6 Run The Automated Emulator Smoke Test
+
+Run:
+
+```bash
+npm run test:emulator
+```
+
+This now performs a real smoke pass:
+
+- builds the app
+- starts a manual `qemu-pebble` session under `xvfb-run`
+- starts a long-lived `pypkjs` sidecar against that QEMU instance
+- installs the app through the pypkjs websocket path
+- captures the chat list
+- injects `Down` and `Select`
+- captures the first chat view
+
+Artifacts are written to:
+
+- `tests/emulator/artifacts/chat-list.png`
+- `tests/emulator/artifacts/chat-open.png`
+
+### 4.7 Run The Emulator Manually
 
 #### Desktop Session
 
@@ -210,6 +233,25 @@ Use the helper script:
 scripts/run-emulator.sh basalt
 ```
 
+This is still useful for quick manual inspection, but the more reliable headless automation path now uses:
+
+```bash
+bash scripts/start-qemu-pkjs-session.sh basalt build/tg-pebble.pbw build/tests/emulator-session.json
+```
+
+That script:
+
+- launches `qemu-pebble` directly
+- launches `pypkjs` directly
+- writes a session file with the QEMU, PKJS, and monitor ports
+- installs the app through the pypkjs websocket transport
+
+Stop that session with:
+
+```bash
+bash scripts/stop-qemu-pkjs-session.sh build/tests/emulator-session.json
+```
+
 What this does:
 
 - detects that there is no `DISPLAY`
@@ -223,7 +265,7 @@ Important:
 - keep that terminal open while you want the emulator session to live
 - stop the session from another shell with `pebble kill`
 
-### 4.7 Emulator-Side CLI Commands
+### 4.8 Emulator-Side CLI Commands
 
 Officially useful commands include:
 
@@ -239,7 +281,23 @@ In practice, see the screenshot notes below for the difference between:
 - one-shot emulator commands
 - reconnecting to an already-running headless emulator
 
-## 5. Pebble Screenshot
+For the manual QEMU harness, use the QEMU monitor helper instead of relying on `--emulator` reconnect semantics:
+
+```bash
+python3 scripts/qemu-monitor.py --port MONITOR_PORT sendkey x s
+python3 scripts/qemu-monitor.py --port MONITOR_PORT screendump tests/emulator/artifacts/frame.ppm
+```
+
+The official emulator docs map watch buttons to keyboard input as follows:
+
+- Back: `Q`
+- Up: `W`
+- Select: `S`
+- Down: `X`
+
+Those keys are what the monitor helper injects through `sendkey`.
+
+## 5. Pebble Screenshot And Screendumps
 
 ### 5.1 Is `pebble screenshot` usable?
 
@@ -258,6 +316,95 @@ This successfully:
 - launches an emulator session
 - captures a screenshot
 - writes the PNG to disk
+
+### 5.2 Which screenshot path is recommended now?
+
+There are two useful paths:
+
+1. one-shot screenshot capture with `pebble screenshot --emulator ...`
+2. stable artifact capture from a manual QEMU session using the monitor `screendump` command
+
+For repeatable automation, prefer the second path.
+
+The smoke harness uses:
+
+```bash
+python3 scripts/qemu-monitor.py --port MONITOR_PORT screendump tests/emulator/artifacts/chat-list.ppm
+/root/.local/share/uv/tools/pebble-tool/bin/python - <<'PY'
+from PIL import Image
+Image.open("tests/emulator/artifacts/chat-list.ppm").convert("RGBA").save("tests/emulator/artifacts/chat-list.png")
+PY
+```
+
+This avoids the `pebble --emulator` reconnection edge cases entirely while still producing a normal PNG artifact.
+
+## 6. Gotchas And Workarounds
+
+### 6.1 `--emulator` reconnects are sensitive to VNC state
+
+The RePebble CLI treats:
+
+- `--emulator basalt`
+- `--emulator basalt --vnc`
+
+as different emulator shapes.
+
+If the live emulator was started with VNC and a follow-up command omits `--vnc`, `pebble-tool` may kill the existing QEMU and attempt to spawn a new one, which fails in headless shells with:
+
+```text
+Could not initialize SDL(x11 not available) - exiting
+```
+
+### 6.2 Manual `qemu-pebble + pypkjs` is the stable headless path
+
+The most reliable flow we found is:
+
+1. start `qemu-pebble` directly under `xvfb-run`
+2. start `pypkjs` directly against that QEMU port
+3. install the app with `pebble install --qemu localhost:PORT`
+4. drive navigation through the QEMU monitor
+5. capture frames with the QEMU monitor `screendump`
+
+That is what `scripts/start-qemu-pkjs-session.sh`, `scripts/qemu-monitor.py`, and `scripts/test-emulator.sh` now automate.
+
+### 6.3 The pypkjs state file changes how `--qemu` behaves
+
+When `/tmp/pb-qemu-pypkjs-<port>.json` exists, `pebble-tool` will route `--qemu localhost:<port>` commands through the pypkjs websocket instead of opening a direct socket to QEMU.
+
+This is desirable for:
+
+- `pebble install`
+- phone-side app communication
+
+But it is less desirable for low-level emulator control and screenshots.
+
+That is why the smoke harness uses the QEMU monitor directly for:
+
+- button injection
+- frame capture
+
+instead of relying on `pebble emu-button` or `pebble screenshot` against the live session.
+
+### 6.4 `pypkjs` logs noisy websocket handler exceptions after short-lived CLI calls
+
+After short-lived websocket clients disconnect, `pypkjs` may log a `TypeError: 'NoneType' object is not iterable` from the gevent websocket handler.
+
+In this environment that noise did not prevent:
+
+- app install
+- PKJS startup
+- AppMessage delivery
+
+But it does make the raw logs look worse than the actual state of the session.
+
+### 6.5 Stale state files still matter
+
+These files can point later commands at dead sessions:
+
+- `/tmp/pb-emulator.json`
+- `/tmp/pb-qemu-pypkjs-*.json`
+
+If emulator commands start connecting to the wrong place, clear those files and relaunch the session.
 - works in a headless shell
 
 ### 5.2 What was the problem, then?
