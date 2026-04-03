@@ -1,6 +1,14 @@
-import { createPkjsApp } from "./lib/app.js";
-import { encodeMessage, MessageType, serializeChatItem, serializeMessageItem, serializeSendResult } from "./lib/protocol.js";
-import { SyncState } from "./lib/sync_state.js";
+var appLib = require("./lib/app");
+var protocol = require("./lib/protocol");
+var syncStateLib = require("./lib/sync_state");
+
+var createPkjsApp = appLib.createPkjsApp;
+var encodeMessage = protocol.encodeMessage;
+var MessageType = protocol.MessageType;
+var serializeChatItem = protocol.serializeChatItem;
+var serializeMessageItem = protocol.serializeMessageItem;
+var serializeSendResult = protocol.serializeSendResult;
+var SyncState = syncStateLib.SyncState;
 
 var app = createPkjsApp({
   storage: typeof localStorage !== "undefined" ? localStorage : null
@@ -215,4 +223,7 @@ if (typeof Pebble !== "undefined" && Pebble.addEventListener) {
   });
 }
 
-export { app };
+module.exports = {
+  app: app,
+  handleRequest: handleRequest
+};

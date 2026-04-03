@@ -1,9 +1,17 @@
-import { createCacheStore } from "./cache_store.js";
-import { createFixtureState } from "./fixtures.js";
-import { buildChatListPagePayload, buildChatPagePayload } from "./protocol.js";
-import { SyncEvent, SyncState, reduceSyncState } from "./sync_state.js";
+var cacheStoreLib = require("./cache_store");
+var fixturesLib = require("./fixtures");
+var protocol = require("./protocol");
+var syncStateLib = require("./sync_state");
 
-export function createPkjsApp(options) {
+var createCacheStore = cacheStoreLib.createCacheStore;
+var createFixtureState = fixturesLib.createFixtureState;
+var buildChatListPagePayload = protocol.buildChatListPagePayload;
+var buildChatPagePayload = protocol.buildChatPagePayload;
+var SyncEvent = syncStateLib.SyncEvent;
+var SyncState = syncStateLib.SyncState;
+var reduceSyncState = syncStateLib.reduceSyncState;
+
+function createPkjsApp(options) {
   var storage = options.storage;
   var transport = options.transport || null;
   var cache = createCacheStore(storage);
@@ -160,3 +168,7 @@ export function createPkjsApp(options) {
     }
   };
 }
+
+module.exports = {
+  createPkjsApp: createPkjsApp
+};

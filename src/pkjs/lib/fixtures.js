@@ -1,4 +1,6 @@
-import { addSenderRunMetadata } from "./message_groups.js";
+var messageGroups = require("./message_groups");
+
+var addSenderRunMetadata = messageGroups.addSenderRunMetadata;
 
 var FIXTURE_CHATS = Object.freeze([
   { id: 1001, title: "Alice", preview: "See you soon", unreadCount: 2 },
@@ -80,7 +82,7 @@ function cloneMessages() {
   return pages;
 }
 
-export function createFixtureState() {
+function createFixtureState() {
   return {
     session: {
       fixtureSession: true,
@@ -90,3 +92,7 @@ export function createFixtureState() {
     messagePages: cloneMessages()
   };
 }
+
+module.exports = {
+  createFixtureState: createFixtureState
+};

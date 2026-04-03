@@ -1,4 +1,4 @@
-export var CACHE_KEYS = Object.freeze({
+var CACHE_KEYS = Object.freeze({
   session: "session",
   settings: "settings",
   chatList: "chat_list",
@@ -9,6 +9,25 @@ export var CACHE_KEYS = Object.freeze({
 var DEFAULT_SETTINGS = Object.freeze({
   sendMode: "preview"
 });
+
+function createMemoryStorage() {
+  var data = {};
+
+  return {
+    getItem: function(key) {
+      if (Object.prototype.hasOwnProperty.call(data, key)) {
+        return data[key];
+      }
+      return null;
+    },
+    setItem: function(key, value) {
+      data[key] = String(value);
+    },
+    removeItem: function(key) {
+      delete data[key];
+    }
+  };
+}
 
 function mergeSettings(settings) {
   var merged = {
@@ -27,10 +46,11 @@ function mergeSettings(settings) {
   return merged;
 }
 
-export function createCacheStore(storage, options) {
+function createCacheStore(storage, options) {
   var prefix = "tg_pebble";
 
   options = options || {};
+  storage = storage || createMemoryStorage();
   if (options.prefix) {
     prefix = options.prefix;
   }
@@ -110,3 +130,8 @@ export function createCacheStore(storage, options) {
     }
   };
 }
+
+module.exports = {
+  CACHE_KEYS: CACHE_KEYS,
+  createCacheStore: createCacheStore
+};

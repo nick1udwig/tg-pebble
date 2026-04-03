@@ -1,17 +1,17 @@
-export var SyncState = Object.freeze({
+var SyncState = Object.freeze({
   syncing: "syncing",
   synced: "synced",
   desynced: "desynced"
 });
 
-export var SyncEvent = Object.freeze({
+var SyncEvent = Object.freeze({
   refreshStart: "refresh_start",
   refreshSuccess: "refresh_success",
   refreshError: "refresh_error",
   connectionLost: "connection_lost"
 });
 
-export function reduceSyncState(currentState, event) {
+function reduceSyncState(currentState, event) {
   var eventType = event && event.type ? event.type : null;
 
   if (!currentState) {
@@ -30,3 +30,9 @@ export function reduceSyncState(currentState, event) {
       return currentState;
   }
 }
+
+module.exports = {
+  SyncEvent: SyncEvent,
+  SyncState: SyncState,
+  reduceSyncState: reduceSyncState
+};

@@ -444,38 +444,74 @@ Workaround:
 - use `scripts/run-emulator.sh` for interactive headless development
 - treat persistent headless emulator orchestration as future harness work
 
-### 6.7 Headless Emulator PKJS Bridge Was Not Reliable
+### 6.7 PKJS Runtime Compatibility In The Emulator
 
 Problem:
 
-- the watch app launched correctly in the headless emulator
-- native watch-side logs and screenshots worked
-- but the default phone-simulator path behind `pebble install --emulator ... --logs` did not deliver PKJS `AppMessage` replies in this environment
+- the watch app launched correctly
+- `pypkjs` launched correctly
+- but the bundled PKJS crashed immediately on startup
 
-Observed behavior:
+Observed behavior under a verbose launch:
 
-- the watch sent repeated bootstrap requests such as `app_ready`
-- no inbound PKJS messages reached the watch
-- the watch shell remained on its local loading state even though the PKJS bundle was present in the `.pbw`
+```bash
+xvfb-run -a pebble install -vv build/tg-pebble.pbw --emulator basalt --logs
+```
 
-What was verified:
+The key failure looked like:
 
-- the multi-file PKJS bundle is now built through `package.json` `pebble.enableMultiJS`
-- the SDK successfully emits `build/pebble-js-app.js`
-- the watch app installs and stays alive in the emulator
-- watch-side screenshots such as `build/tests/live-shell.png` can be captured from that live session
+```text
+SyntaxError: Cannot use import statement outside a module
+```
 
-Current workaround:
+Root cause:
 
-- use the emulator to validate the native watch shell, layout, and navigation scaffolding
-- use JS unit tests to validate PKJS behavior deterministically
-- treat end-to-end PKJS-in-emulator validation as pending follow-up work
+- the RePebble SDK bundles PKJS with an older Webpack/pypkjs stack
+- multi-file PKJS was enabled correctly through `package.json`
+- but the runtime still expected CommonJS-style modules, not source files using ESM `import` / `export`
 
-Likely next investigation:
+Fix:
 
-- try the direct QEMU path with `--qemu ... --pypkjs --platform <platform>`
-- compare behavior in a desktop session versus the current headless shell
-- inspect whether the default phone simulator path is dropping messages before PKJS `ready`
+- keep `pebble.enableMultiJS: true` in `package.json`
+- write PKJS sources using CommonJS:
+  - `require(...)`
+  - `module.exports = ...`
+
+Verification:
+
+- `pypkjs` starts
+- the watch receives `sync_status`, `settings_state`, `chat_item`, and `chat_list_complete`
+- live chat-list screenshots now work, for example:
+  - [build/tests/live-chat-list.png](/root/git/tg-pebble/build/tests/live-chat-list.png)
+
+### 6.8 Stale Emulator Metadata In `/tmp`
+
+Problem:
+
+- after interrupted emulator runs, `pebble-tool` could incorrectly think QEMU / `pypkjs` were still alive
+- subsequent commands would then try to reuse dead ports and fail with connection errors
+
+Observed files:
+
+- `/tmp/pb-emulator.json`
+- `/tmp/pb-qemu-pypkjs-*.json`
+
+Symptom shape:
+
+```text
+QEMU is already running.
+pypkjs is already running.
+[Errno 111] Connection refused
+```
+
+Fix:
+
+```bash
+pebble kill || true
+rm -f /tmp/pb-emulator.json /tmp/pb-qemu-pypkjs-*.json
+```
+
+Use that cleanup before retrying a fresh headless emulator launch if the CLI claims to be reusing dead emulator state.
 
 ## 7. Practical Command Summary
 
@@ -536,5 +572,5 @@ As of this runbook:
 - `npm run test:config` is working
 - one-shot headless `pebble screenshot` capture is working
 - the headless emulator launches the native watch shell successfully
-- PKJS logic is covered by JS tests, but end-to-end PKJS delivery inside the headless emulator remains unresolved
+- end-to-end PKJS delivery in the headless emulator is working after the CommonJS conversion
 - persistent headless emulator reconnection remains a known limitation and should be handled by a future automation harness

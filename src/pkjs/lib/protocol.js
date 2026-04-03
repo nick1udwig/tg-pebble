@@ -1,6 +1,8 @@
-import { SyncState } from "./sync_state.js";
+var syncStateLib = require("./sync_state");
 
-export var MessageType = Object.freeze({
+var SyncState = syncStateLib.SyncState;
+
+var MessageType = Object.freeze({
   appReady: "app_ready",
   openChat: "open_chat",
   chatItem: "chat_item",
@@ -16,7 +18,7 @@ export var MessageType = Object.freeze({
   sendResult: "send_result"
 });
 
-export var AppMessageKey = Object.freeze({
+var AppMessageKey = Object.freeze({
   type: 0,
   payloadString: 1,
   requestId: 2,
@@ -30,7 +32,7 @@ function sanitizeField(value) {
     .trim();
 }
 
-export function encodeMessage(type, payloadString, requestId, syncState) {
+function encodeMessage(type, payloadString, requestId, syncState) {
   var message = {};
 
   if (payloadString == null) {
@@ -50,7 +52,7 @@ export function encodeMessage(type, payloadString, requestId, syncState) {
   return message;
 }
 
-export function buildChatListPagePayload(params) {
+function buildChatListPagePayload(params) {
   var syncState = params.syncState || SyncState.synced;
 
   return {
@@ -60,7 +62,7 @@ export function buildChatListPagePayload(params) {
   };
 }
 
-export function buildChatPagePayload(params) {
+function buildChatPagePayload(params) {
   var syncState = params.syncState || SyncState.synced;
   var hasOlder = params.hasOlder === true;
 
@@ -73,7 +75,7 @@ export function buildChatPagePayload(params) {
   };
 }
 
-export function serializeChatItem(chat) {
+function serializeChatItem(chat) {
   return [
     sanitizeField(chat.id),
     sanitizeField(chat.title),
@@ -82,7 +84,7 @@ export function serializeChatItem(chat) {
   ].join("|");
 }
 
-export function serializeMessageItem(message) {
+function serializeMessageItem(message) {
   return [
     sanitizeField(message.senderName),
     message.showSender ? "1" : "0",
@@ -91,10 +93,21 @@ export function serializeMessageItem(message) {
   ].join("|");
 }
 
-export function serializeSendResult(result) {
+function serializeSendResult(result) {
   if (result.ok) {
     return "ok";
   }
 
   return "error|" + sanitizeField(result.detail || "");
 }
+
+module.exports = {
+  AppMessageKey: AppMessageKey,
+  MessageType: MessageType,
+  buildChatListPagePayload: buildChatListPagePayload,
+  buildChatPagePayload: buildChatPagePayload,
+  encodeMessage: encodeMessage,
+  serializeChatItem: serializeChatItem,
+  serializeMessageItem: serializeMessageItem,
+  serializeSendResult: serializeSendResult
+};

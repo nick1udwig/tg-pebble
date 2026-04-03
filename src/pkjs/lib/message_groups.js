@@ -12,7 +12,7 @@ function copyMessage(message, showSender) {
   return result;
 }
 
-export function addSenderRunMetadata(messages) {
+function addSenderRunMetadata(messages) {
   var previousSenderId = null;
   var hasPrevious = false;
   var output = [];
@@ -28,3 +28,7 @@ export function addSenderRunMetadata(messages) {
 
   return output;
 }
+
+module.exports = {
+  addSenderRunMetadata: addSenderRunMetadata
+};

@@ -94,6 +94,31 @@ static void prv_request_chat_list(void);
 static void prv_request_chat_page(int32_t chat_id);
 static void prv_schedule_bootstrap(uint32_t delay_ms);
 
+static bool prv_parse_count_string(const char *value, size_t max_value, size_t *out) {
+  size_t parsed = 0;
+  size_t index = 0;
+
+  if (!value || !value[0] || !out) {
+    return false;
+  }
+
+  while (value[index] != '\0') {
+    if (value[index] < '0' || value[index] > '9') {
+      return false;
+    }
+
+    parsed = (parsed * 10U) + (size_t)(value[index] - '0');
+    if (parsed > max_value) {
+      parsed = max_value;
+      break;
+    }
+    index += 1;
+  }
+
+  *out = parsed;
+  return true;
+}
+
 static bool prv_supports_microphone(void) {
 #if defined(PBL_MICROPHONE)
   return true;
@@ -225,8 +250,6 @@ static void prv_update_preview_contents(void) {
 static bool prv_send_request(const char *type, const char *payload) {
   DictionaryIterator *iter = NULL;
 
-  APP_LOG(APP_LOG_LEVEL_INFO, "sending request %s", type);
-
   if (app_message_outbox_begin(&iter) != APP_MSG_OK || !iter) {
     APP_LOG(APP_LOG_LEVEL_ERROR, "Failed to begin outbox for %s", type);
     return false;
@@ -251,7 +274,6 @@ static void prv_bootstrap_timer_callback(void *context) {
   if (s_has_received_inbox) {
     return;
   }
-  APP_LOG(APP_LOG_LEVEL_INFO, "bootstrap timer fired");
   prv_request_chat_list();
   if (!s_has_received_inbox) {
     prv_schedule_bootstrap(1500);
@@ -284,7 +306,6 @@ static void prv_clear_message_items(void) {
 }
 
 static void prv_request_chat_list(void) {
-  APP_LOG(APP_LOG_LEVEL_INFO, "requesting chat list");
   prv_clear_chat_items();
   prv_set_sync_status_from_string("syncing");
   (void)prv_send_request(TG_MSG_APP_READY, "");
@@ -292,8 +313,6 @@ static void prv_request_chat_list(void) {
 
 static void prv_request_chat_page(int32_t chat_id) {
   char payload[16];
-
-  APP_LOG(APP_LOG_LEVEL_INFO, "requesting chat page %ld", (long)chat_id);
   prv_clear_message_items();
   prv_set_sync_status_from_string("syncing");
   (void)snprintf(payload, sizeof(payload), "%ld", (long)chat_id);
@@ -812,8 +831,6 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
     s_bootstrap_timer = NULL;
   }
 
-  APP_LOG(APP_LOG_LEVEL_INFO, "received type=%s request_id=%lu", type, (unsigned long)request_id);
-
   if (strcmp(type, TG_MSG_SYNC_STATUS) == 0) {
     return;
   }
@@ -849,15 +866,11 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
 
   if (strcmp(type, TG_MSG_CHAT_LIST_COMPLETE) == 0) {
     if (payload && payload[0] != '\0') {
-      long parsed_count = strtol(payload, NULL, 10);
+      size_t parsed_count = 0;
 
-      if (parsed_count < 0) {
-        parsed_count = 0;
+      if (prv_parse_count_string(payload, TG_MAX_CHATS, &parsed_count)) {
+        s_chat_count = parsed_count;
       }
-      if (parsed_count > TG_MAX_CHATS) {
-        parsed_count = TG_MAX_CHATS;
-      }
-      s_chat_count = (size_t)parsed_count;
     }
     if (s_chat_list_menu_layer) {
       menu_layer_reload_data(s_chat_list_menu_layer);
@@ -918,54 +931,44 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
 }
 
 static void prv_init(void) {
-  APP_LOG(APP_LOG_LEVEL_INFO, "init start");
   app_message_register_inbox_received(prv_inbox_received);
   app_message_register_inbox_dropped(prv_inbox_dropped);
   app_message_register_outbox_failed(prv_outbox_failed);
   app_message_register_outbox_sent(prv_outbox_sent);
   app_message_open(512, 512);
   s_has_received_inbox = false;
-  APP_LOG(APP_LOG_LEVEL_INFO, "app_message ready");
 
   s_chat_list_window = window_create();
   window_set_window_handlers(s_chat_list_window, (WindowHandlers){
                                                      .load = prv_chat_list_window_load,
                                                      .unload = prv_chat_list_window_unload,
                                                  });
-  APP_LOG(APP_LOG_LEVEL_INFO, "chat list window ready");
 
   s_chat_window = window_create();
   window_set_window_handlers(s_chat_window, (WindowHandlers){
                                                 .load = prv_chat_window_load,
                                                 .unload = prv_chat_window_unload,
                                             });
-  APP_LOG(APP_LOG_LEVEL_INFO, "chat window ready");
 
   s_preview_window = window_create();
   window_set_window_handlers(s_preview_window, (WindowHandlers){
                                                    .load = prv_preview_window_load,
                                                    .unload = prv_preview_window_unload,
                                                });
-  APP_LOG(APP_LOG_LEVEL_INFO, "preview window ready");
 
   s_settings_window = window_create();
   window_set_window_handlers(s_settings_window, (WindowHandlers){
                                                     .load = prv_settings_window_load,
                                                     .unload = prv_settings_window_unload,
                                                 });
-  APP_LOG(APP_LOG_LEVEL_INFO, "settings window ready");
 
 #if defined(PBL_MICROPHONE)
-  APP_LOG(APP_LOG_LEVEL_INFO, "creating dictation session");
   s_dictation_session = dictation_session_create(sizeof(s_preview_text), prv_dictation_callback, NULL);
   dictation_session_enable_confirmation(s_dictation_session, false);
-  APP_LOG(APP_LOG_LEVEL_INFO, "dictation session ready");
 #endif
 
   window_stack_push(s_chat_list_window, true);
-  APP_LOG(APP_LOG_LEVEL_INFO, "chat list window pushed");
   prv_schedule_bootstrap(700);
-  APP_LOG(APP_LOG_LEVEL_INFO, "init complete");
 }
 
 static void prv_deinit(void) {

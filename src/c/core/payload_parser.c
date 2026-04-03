@@ -1,6 +1,5 @@
 #include "payload_parser.h"
 
-#include <stdlib.h>
 #include <string.h>
 
 static void prv_copy_field(char *dest, size_t dest_size, const char *start, size_t length) {
@@ -44,10 +43,33 @@ static bool prv_parse_bool_field(const char *field) {
   return field && field[0] == '1';
 }
 
+static bool prv_parse_uint_field(const char *field, uint32_t *out) {
+  uint32_t value = 0;
+  size_t index = 0;
+
+  if (!field || !field[0] || !out) {
+    return false;
+  }
+
+  while (field[index] != '\0') {
+    if (field[index] < '0' || field[index] > '9') {
+      return false;
+    }
+
+    value = (value * 10U) + (uint32_t)(field[index] - '0');
+    index += 1;
+  }
+
+  *out = value;
+  return true;
+}
+
 bool tg_parse_chat_item_payload(const char *payload, TgParsedChatItem *out) {
   const char *cursor = payload;
   char id_buffer[16];
   char unread_buffer[16];
+  uint32_t chat_id = 0;
+  uint32_t unread_count = 0;
 
   if (!payload || !out) {
     return false;
@@ -60,8 +82,12 @@ bool tg_parse_chat_item_payload(const char *payload, TgParsedChatItem *out) {
     return false;
   }
 
-  out->chat_id = (int32_t)strtol(id_buffer, NULL, 10);
-  out->unread_count = (unsigned int)strtoul(unread_buffer, NULL, 10);
+  if (!prv_parse_uint_field(id_buffer, &chat_id) || !prv_parse_uint_field(unread_buffer, &unread_count)) {
+    return false;
+  }
+
+  out->chat_id = (int32_t)chat_id;
+  out->unread_count = (unsigned int)unread_count;
   return true;
 }
 

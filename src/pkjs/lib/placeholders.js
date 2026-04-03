@@ -5,7 +5,7 @@ var PLACEHOLDERS = Object.freeze({
   file: "File"
 });
 
-export function toDisplayText(message) {
+function toDisplayText(message) {
   if (!message) {
     return "";
   }
@@ -16,3 +16,7 @@ export function toDisplayText(message) {
 
   return PLACEHOLDERS[message.kind] || "Unsupported message";
 }
+
+module.exports = {
+  toDisplayText: toDisplayText
+};
