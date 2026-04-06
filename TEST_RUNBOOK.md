@@ -192,8 +192,11 @@ Optional variables:
 
 - `TG_SESSION_STRING`
 - `TG_TEST_ALLOW_SEND_CODE`
+- `TG_TEST_ALLOW_SEND`
 - `TG_TEST_ALLOW_LOGOUT`
 - `TG_TEST_PREFER_SIGN_UP`
+- `TG_TEST_TARGET_PEER`
+- `TG_TEST_MUTATION_TEXT_PREFIX`
 - `TG_TEST_PHONE`
 - `TG_TEST_CODE`
 - `TG_TEST_PASSWORD`
@@ -242,6 +245,15 @@ TG_TEST_ALLOW_LOGOUT=1
 ```
 
 unless you intentionally want the suite to perform a real Telegram logout on that account.
+
+The live mutation suite is also opt-in. To test a real send:
+
+```bash
+TG_TEST_ALLOW_SEND=1
+TG_TEST_TARGET_PEER=me
+```
+
+By default this sends to `Saved Messages` (`me`), which is the safest live target. Each send uses a unique prefix/timestamp marker and verifies that the message appears in recent history. The default `test:telegram` command still runs this suite, but the mutation tests remain skipped unless you explicitly enable them.
 
 #### Create A Saved Session String
 

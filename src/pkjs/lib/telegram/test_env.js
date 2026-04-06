@@ -38,6 +38,7 @@ function loadTelegramTestEnv(env) {
   var sessionString = String(source.TG_SESSION_STRING || "");
   var allowSendCode = parseBoolean(source.TG_TEST_ALLOW_SEND_CODE, testServers);
   var allowLogout = parseBoolean(source.TG_TEST_ALLOW_LOGOUT, false);
+  var allowSend = parseBoolean(source.TG_TEST_ALLOW_SEND, false);
   var preferSignUp = parseBoolean(source.TG_TEST_PREFER_SIGN_UP, testServers);
   var missing = [];
   var errors = [];
@@ -101,6 +102,9 @@ function loadTelegramTestEnv(env) {
     testServers: testServers,
     allowSendCode: allowSendCode,
     allowLogout: allowLogout,
+    allowSend: allowSend,
+    targetPeer: String(source.TG_TEST_TARGET_PEER || "me"),
+    mutationTextPrefix: String(source.TG_TEST_MUTATION_TEXT_PREFIX || "[TG Pebble Test]"),
     preferSignUp: preferSignUp,
     connectionRetries: Number.isFinite(parseInteger(source.TG_TEST_CONNECTION_RETRIES))
       ? parseInteger(source.TG_TEST_CONNECTION_RETRIES)
@@ -262,6 +266,18 @@ async function getTelegramDialogMessages(client, entity, options) {
   });
 }
 
+async function resolveTelegramPeer(client, peer) {
+  await ensureTelegramTestClientConnected(client);
+  return client.getInputEntity(peer || "me");
+}
+
+async function sendTelegramTextMessage(client, peer, text) {
+  await ensureTelegramTestClientConnected(client);
+  return client.sendMessage(peer || "me", {
+    message: String(text == null ? "" : text)
+  });
+}
+
 async function logoutTelegramTestUser(client) {
   await client.invoke(new Api.auth.LogOut());
 }
@@ -287,5 +303,7 @@ module.exports = {
   loginTelegramTestUser: loginTelegramTestUser,
   listTelegramDialogs: listTelegramDialogs,
   logoutTelegramTestUser: logoutTelegramTestUser,
-  restoreTelegramTestSession: restoreTelegramTestSession
+  resolveTelegramPeer: resolveTelegramPeer,
+  restoreTelegramTestSession: restoreTelegramTestSession,
+  sendTelegramTextMessage: sendTelegramTextMessage
 };

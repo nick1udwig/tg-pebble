@@ -14,8 +14,13 @@ var reduceSyncState = syncStateLib.reduceSyncState;
 function createPkjsApp(options) {
   var storage = options.storage;
   var transport = options.transport || null;
+  var telegramAdapterFactory = options.telegramAdapterFactory || null;
   var cache = createCacheStore(storage);
   var syncState = SyncState.desynced;
+
+  if (options.initialSession && !cache.getSession()) {
+    cache.setSession(options.initialSession);
+  }
 
   function ensureFixtureCache() {
     var fixtureState;
@@ -25,9 +30,12 @@ function createPkjsApp(options) {
     }
 
     fixtureState = createFixtureState();
-    cache.setSession(fixtureState.session);
+    if (!cache.getSession()) {
+      cache.setSession(fixtureState.session);
+    }
     cache.setChatList(fixtureState.chats);
     cache.setMessagePages(fixtureState.messagePages);
+    cache.setChatRefs({});
   }
 
   function findChat(chatId) {
@@ -35,12 +43,144 @@ function createPkjsApp(options) {
     var index;
 
     for (index = 0; index < chats.length; index += 1) {
-      if (Number(chats[index].id) === Number(chatId)) {
+      if (String(chats[index].id) === String(chatId)) {
         return chats[index];
       }
     }
 
     return null;
+  }
+
+  function getChatRef(chatId) {
+    var refs = cache.getChatRefs();
+    return refs[String(chatId)] || null;
+  }
+
+  function getTelegramAdapter() {
+    var session = cache.getSession();
+
+    if (!telegramAdapterFactory || !session || !session.sessionString) {
+      return null;
+    }
+
+    return telegramAdapterFactory(session);
+  }
+
+  function buildCurrentChatListPayload() {
+    return buildChatListPagePayload({
+      chats: cache.getChatList(),
+      syncState: syncState
+    });
+  }
+
+  function buildCurrentChatPagePayload(chatId) {
+    var pages = cache.getMessagePages();
+
+    return buildChatPagePayload({
+      chatId: chatId,
+      messages: pages[chatId] || [],
+      syncState: syncState
+    });
+  }
+
+  function updateMessagePage(chatId, messages) {
+    var pages = cache.getMessagePages();
+    var nextPages = {};
+    var key;
+
+    for (key in pages) {
+      if (Object.prototype.hasOwnProperty.call(pages, key)) {
+        nextPages[key] = pages[key];
+      }
+    }
+
+    nextPages[chatId] = messages;
+    cache.setMessagePages(nextPages);
+  }
+
+  function messagesMatch(left, right) {
+    if (!left || !right) {
+      return false;
+    }
+
+    return !!left.outgoing === !!right.outgoing &&
+      String(left.senderName || "") === String(right.senderName || "") &&
+      String(left.text || "") === String(right.text || "");
+  }
+
+  function mergeOptimisticTail(cachedMessages, fetchedMessages) {
+    var optimisticTail = [];
+    var index;
+    var compareStart;
+
+    cachedMessages = cachedMessages || [];
+    fetchedMessages = fetchedMessages || [];
+
+    for (index = cachedMessages.length - 1; index >= 0; index -= 1) {
+      if (!cachedMessages[index].outgoing) {
+        break;
+      }
+
+      optimisticTail.unshift(cachedMessages[index]);
+    }
+
+    if (optimisticTail.length === 0) {
+      return fetchedMessages;
+    }
+
+    compareStart = fetchedMessages.length - optimisticTail.length;
+    if (compareStart >= 0) {
+      for (index = 0; index < optimisticTail.length; index += 1) {
+        if (!messagesMatch(fetchedMessages[compareStart + index], optimisticTail[index])) {
+          compareStart = -1;
+          break;
+        }
+      }
+    }
+
+    if (compareStart >= 0) {
+      return fetchedMessages;
+    }
+
+    return fetchedMessages.concat(optimisticTail);
+  }
+
+  function updateChatPreview(chatId, previewText) {
+    var chats = cache.getChatList();
+    var nextChats = [];
+    var index;
+
+    for (index = 0; index < chats.length; index += 1) {
+      if (String(chats[index].id) === String(chatId)) {
+        nextChats.push({
+          id: chats[index].id,
+          remoteId: chats[index].remoteId,
+          title: chats[index].title,
+          preview: previewText,
+          unreadCount: 0
+        });
+      } else {
+        nextChats.push(chats[index]);
+      }
+    }
+
+    cache.setChatList(nextChats);
+  }
+
+  function appendOutgoingMessageToCache(chatId, text) {
+    var existingMessages = cache.getMessagePages()[chatId] || [];
+    var nextMessages = existingMessages.slice();
+
+    nextMessages.push({
+      senderId: "self",
+      senderName: "You",
+      outgoing: true,
+      text: text,
+      showSender: existingMessages.length === 0 || String(existingMessages[existingMessages.length - 1].senderId) !== "self"
+    });
+
+    updateMessagePage(chatId, nextMessages);
+    updateChatPreview(chatId, text);
   }
 
   ensureFixtureCache();
@@ -54,21 +194,49 @@ function createPkjsApp(options) {
       syncState = reduceSyncState(syncState, { type: eventType });
       return syncState;
     },
-    bootstrap: function() {
-      var chats;
+    bootstrap: async function() {
+      var adapter = getTelegramAdapter();
+      var result;
 
       ensureFixtureCache();
-      chats = cache.getChatList();
-      return buildChatListPagePayload({ chats: chats, syncState: syncState });
+
+      if (!adapter || !adapter.isConfigured || !adapter.isConfigured()) {
+        return buildCurrentChatListPayload();
+      }
+
+      try {
+        result = await adapter.hydrateChatList({
+          limit: 20,
+          cachedRefs: cache.getChatRefs()
+        });
+        cache.setChatList(result.chats || []);
+        cache.setChatRefs(result.chatRefs || {});
+      } catch (_error) {
+      }
+
+      return buildCurrentChatListPayload();
     },
-    getChatPage: function(chatId) {
-      var pages;
-      var messages;
+    getChatPage: async function(chatId) {
+      var adapter = getTelegramAdapter();
+      var ref = getChatRef(chatId);
+      var result;
 
       ensureFixtureCache();
-      pages = cache.getMessagePages();
-      messages = pages[chatId] || [];
-      return buildChatPagePayload({ chatId: chatId, messages: messages, syncState: syncState });
+
+      if (adapter && adapter.isConfigured && adapter.isConfigured() && ref) {
+        try {
+          var cachedMessages = cache.getMessagePages()[chatId] || [];
+          result = await adapter.hydrateChatPage({
+            chatId: chatId,
+            remoteRef: ref,
+            limit: 20
+          });
+          updateMessagePage(chatId, mergeOptimisticTail(cachedMessages, result.messages || []));
+        } catch (_error) {
+        }
+      }
+
+      return buildCurrentChatPagePayload(chatId);
     },
     refreshStarted: function() {
       return this.setSyncState(SyncEvent.refreshStart);
@@ -79,7 +247,7 @@ function createPkjsApp(options) {
     refreshFailed: function() {
       return this.setSyncState(SyncEvent.refreshError);
     },
-    rehydrateFixtures: function() {
+    rehydrateFixtures: async function() {
       cache.clearChatsAndMessages();
       ensureFixtureCache();
       return this.bootstrap();
@@ -93,7 +261,7 @@ function createPkjsApp(options) {
     setPreviewChatMessage: function(previewChatMessage) {
       return cache.setSettings({ previewChatMessage: previewChatMessage === true });
     },
-    sendMessage: function(chatId, text) {
+    sendMessage: async function(chatId, text) {
       var chatList;
       var messagePages;
       var nextText;
@@ -104,6 +272,9 @@ function createPkjsApp(options) {
       var nextPages;
       var nextChats;
       var index;
+      var adapter = getTelegramAdapter();
+      var ref = getChatRef(chatId);
+      var sendResult;
 
       ensureFixtureCache();
       chatList = cache.getChatList();
@@ -114,13 +285,35 @@ function createPkjsApp(options) {
         return { ok: false, detail: "Message cannot be empty." };
       }
 
-      if (nextText.toLowerCase().indexOf("fail") >= 0) {
-        return { ok: false, detail: "Fixture transport rejected the message." };
-      }
-
       chat = findChat(chatId);
       if (!chat) {
         return { ok: false, detail: "Chat not found." };
+      }
+
+      if (adapter && adapter.isConfigured && adapter.isConfigured() && ref) {
+        try {
+          sendResult = await adapter.sendTextMessage({
+            chatId: chatId,
+            remoteRef: ref,
+            text: nextText
+          });
+
+          if (!sendResult || sendResult.ok !== true) {
+            return { ok: false, detail: "Telegram send failed." };
+          }
+
+          appendOutgoingMessageToCache(chatId, nextText);
+          return { ok: true };
+        } catch (error) {
+          return {
+            ok: false,
+            detail: error && error.message ? error.message : "Telegram send failed."
+          };
+        }
+      }
+
+      if (nextText.toLowerCase().indexOf("fail") >= 0) {
+        return { ok: false, detail: "Fixture transport rejected the message." };
       }
 
       existingMessages = messagePages[chatId] || [];
@@ -145,9 +338,10 @@ function createPkjsApp(options) {
 
       nextChats = [];
       for (index = 0; index < chatList.length; index += 1) {
-        if (Number(chatList[index].id) === Number(chatId)) {
+        if (String(chatList[index].id) === String(chatId)) {
           nextChats.push({
             id: chatList[index].id,
+            remoteId: chatList[index].remoteId,
             title: chatList[index].title,
             preview: nextText,
             unreadCount: 0

@@ -3,6 +3,7 @@ var CACHE_KEYS = Object.freeze({
   settings: "settings",
   chatList: "chat_list",
   messagePages: "message_pages",
+  chatRefs: "chat_refs",
   syncCheckpoint: "sync_checkpoint"
 });
 
@@ -118,9 +119,16 @@ function createCacheStore(storage, options) {
     setMessagePages: function(pages) {
       return setJson(CACHE_KEYS.messagePages, pages);
     },
+    getChatRefs: function() {
+      return getJson(CACHE_KEYS.chatRefs, {});
+    },
+    setChatRefs: function(chatRefs) {
+      return setJson(CACHE_KEYS.chatRefs, chatRefs);
+    },
     clearChatsAndMessages: function() {
       remove(CACHE_KEYS.chatList);
       remove(CACHE_KEYS.messagePages);
+      remove(CACHE_KEYS.chatRefs);
       remove(CACHE_KEYS.syncCheckpoint);
     },
     clearAll: function() {
@@ -128,6 +136,7 @@ function createCacheStore(storage, options) {
       remove(CACHE_KEYS.settings);
       remove(CACHE_KEYS.chatList);
       remove(CACHE_KEYS.messagePages);
+      remove(CACHE_KEYS.chatRefs);
       remove(CACHE_KEYS.syncCheckpoint);
     }
   };

@@ -19,9 +19,9 @@ function createMemoryStorage() {
 }
 
 describe("createPkjsApp", () => {
-  it("hydrates fixture data on bootstrap", () => {
+  it("hydrates fixture data on bootstrap", async () => {
     const app = createPkjsApp({ storage: createMemoryStorage() });
-    const payload = app.bootstrap();
+    const payload = await app.bootstrap();
 
     expect(payload.chats.length).toBeGreaterThan(0);
     expect(payload.chats[0]).toMatchObject({
@@ -41,13 +41,13 @@ describe("createPkjsApp", () => {
     expect(app.getSettingsState()).toEqual({ sendMode: "auto", previewChatMessage: true });
   });
 
-  it("appends a fixture outgoing message on successful send", () => {
+  it("appends a fixture outgoing message on successful send", async () => {
     const app = createPkjsApp({ storage: createMemoryStorage() });
-    const before = app.getChatPage(1001).messages.length;
+    const before = (await app.getChatPage(1001)).messages.length;
 
-    expect(app.sendMessage(1001, "Sent from test")).toEqual({ ok: true });
+    expect(await app.sendMessage(1001, "Sent from test")).toEqual({ ok: true });
 
-    const after = app.getChatPage(1001).messages;
+    const after = (await app.getChatPage(1001)).messages;
     expect(after.length).toBe(before + 1);
     expect(after.at(-1)).toMatchObject({
       senderName: "You",
@@ -56,12 +56,71 @@ describe("createPkjsApp", () => {
     });
   });
 
-  it("returns a deterministic fixture error for failing send text", () => {
+  it("returns a deterministic fixture error for failing send text", async () => {
     const app = createPkjsApp({ storage: createMemoryStorage() });
 
-    expect(app.sendMessage(1001, "please fail this send")).toEqual({
+    expect(await app.sendMessage(1001, "please fail this send")).toEqual({
       ok: false,
       detail: "Fixture transport rejected the message.",
+    });
+  });
+
+  it("uses the Telegram adapter when a session is available", async () => {
+    const app = createPkjsApp({
+      storage: createMemoryStorage(),
+      initialSession: { sessionString: "live-session" },
+      telegramAdapterFactory() {
+        return {
+          isConfigured() {
+            return true;
+          },
+          async hydrateChatList() {
+            return {
+              chats: [
+                { id: 7, remoteId: "user:42", title: "Live Alice", preview: "Latest", unreadCount: 1 },
+              ],
+              chatRefs: {
+                7: { peerKey: "user:42", peerType: "user", peerId: "42", accessHash: "123" },
+              },
+            };
+          },
+          async hydrateChatPage() {
+            return {
+              chatId: 7,
+              messages: [
+                {
+                  senderId: "42",
+                  senderName: "Live Alice",
+                  outgoing: false,
+                  text: "Latest",
+                  showSender: true,
+                },
+              ],
+            };
+          },
+          async sendTextMessage() {
+            return { ok: true, messageId: 10 };
+          },
+        };
+      },
+    });
+
+    const chatList = await app.bootstrap();
+    const chatPage = await app.getChatPage(7);
+    const sendResult = await app.sendMessage(7, "Reply");
+
+    expect(chatList.chats).toEqual([
+      { id: 7, remoteId: "user:42", title: "Live Alice", preview: "Latest", unreadCount: 1 },
+    ]);
+    expect(chatPage.messages[0]).toMatchObject({
+      senderName: "Live Alice",
+      text: "Latest",
+    });
+    expect(sendResult).toEqual({ ok: true });
+    expect((await app.getChatPage(7)).messages.at(-1)).toMatchObject({
+      senderName: "You",
+      text: "Reply",
+      outgoing: true,
     });
   });
 });

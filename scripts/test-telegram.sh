@@ -11,4 +11,8 @@ if [[ "${TG_TEST_ENABLE:-0}" == "1" && "${TG_TEST_SERVERS:-1}" != "1" && "${TG_T
   echo "Warning: TG_TEST_ALLOW_LOGOUT=1 will perform a real Telegram logout on the live account." >&2
 fi
 
+if [[ "${TG_TEST_ENABLE:-0}" == "1" && "${TG_TEST_SERVERS:-1}" != "1" && "${TG_TEST_ALLOW_SEND:-0}" == "1" ]]; then
+  echo "Warning: TG_TEST_ALLOW_SEND=1 will send a real message to ${TG_TEST_TARGET_PEER:-me}." >&2
+fi
+
 npx vitest run tests/js/integration "$@"
