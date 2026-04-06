@@ -57,7 +57,7 @@ function loadTelegramTestEnv(env) {
     errors.push("TG_API_HASH still contains the example placeholder value.");
   }
 
-  if (source.TG_TEST_PHONE) {
+  if (allowSendCode && source.TG_TEST_PHONE) {
     if (PLACEHOLDER_PATTERNS.phoneNumber.test(String(source.TG_TEST_PHONE))) {
       errors.push("TG_TEST_PHONE still contains X/Y placeholder characters.");
     } else if (!/^\+?\d+$/.test(String(source.TG_TEST_PHONE))) {
@@ -65,7 +65,7 @@ function loadTelegramTestEnv(env) {
     }
   }
 
-  if (source.TG_TEST_CODE) {
+  if (allowSendCode && source.TG_TEST_CODE) {
     if (PLACEHOLDER_PATTERNS.phoneCode.test(String(source.TG_TEST_CODE))) {
       errors.push("TG_TEST_CODE still contains example placeholder characters.");
     } else if (!/^\d+$/.test(String(source.TG_TEST_CODE))) {
