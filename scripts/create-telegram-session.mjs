@@ -3,7 +3,7 @@
 import readline from "node:readline";
 
 import { TelegramClient } from "telegram";
-import { StringSession } from "telegram/sessions";
+import { StringSession } from "telegram/sessions/index.js";
 
 function ask(question) {
   const rl = readline.createInterface({
