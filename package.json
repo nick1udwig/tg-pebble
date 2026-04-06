@@ -41,6 +41,7 @@
     "test:c": "bash scripts/test-c.sh",
     "test:config": "bash scripts/test-config.sh",
     "test:telegram": "bash scripts/test-telegram.sh",
+    "telegram:session": "node scripts/create-telegram-session.mjs",
     "test:emulator": "bash scripts/test-emulator.sh",
     "dev:config": "node scripts/serve-config-page.mjs --port 4173",
     "capture:baselines": "bash scripts/capture-baselines.sh",

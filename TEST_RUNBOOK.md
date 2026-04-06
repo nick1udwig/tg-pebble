@@ -243,6 +243,59 @@ TG_TEST_ALLOW_LOGOUT=1
 
 unless you intentionally want the suite to perform a real Telegram logout on that account.
 
+#### Create A Saved Session String
+
+To create `TG_SESSION_STRING` for a live throwaway account:
+
+1. Set these variables in [`.env.telegram.test`](/root/git/tg-pebble/.env.telegram.test):
+
+```bash
+TG_TEST_ENABLE=1
+TG_TEST_SERVERS=0
+TG_API_ID=...
+TG_API_HASH=...
+TG_TEST_USE_WSS=1
+```
+
+2. Load the env file and run:
+
+```bash
+set -a
+source ./.env.telegram.test
+set +a
+npm run telegram:session
+```
+
+3. Enter:
+
+- the phone number for the throwaway real Telegram account
+- the login code
+- the 2FA password if the account has one
+
+4. Copy the printed line:
+
+```bash
+TG_SESSION_STRING=...
+```
+
+into [`.env.telegram.test`](/root/git/tg-pebble/.env.telegram.test).
+
+5. Keep these production-safe settings:
+
+```bash
+TG_TEST_SERVERS=0
+TG_TEST_ALLOW_LOGOUT=0
+```
+
+6. Run the live integration suite:
+
+```bash
+set -a
+source ./.env.telegram.test
+set +a
+npm run test:telegram
+```
+
 ### 4.5 Full Non-Emulator Test Pass
 
 Run:
