@@ -48,4 +48,20 @@ describe("telegram test env config", () => {
     expect(config.missing).toContain("TG_TEST_CODE");
     expect(canRunTelegramTestEnv(config)).toBe(false);
   });
+
+  it("rejects production send tests without a real target dialog", () => {
+    const config = loadTelegramTestEnv({
+      TG_TEST_ENABLE: "1",
+      TG_API_ID: "123456",
+      TG_API_HASH: "abc123",
+      TG_TEST_SERVERS: "0",
+      TG_SESSION_STRING: "saved-session",
+      TG_TEST_ALLOW_SEND: "1",
+    });
+
+    expect(config.errors).toContain(
+      "Production send tests require TG_TEST_TARGET_PEER to reference a real dialog; Saved Messages (`me`) is not supported by this Telegram send path."
+    );
+    expect(canRunTelegramTestEnv(config)).toBe(false);
+  });
 });

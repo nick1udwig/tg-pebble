@@ -39,6 +39,7 @@ function loadTelegramTestEnv(env) {
   var allowSendCode = parseBoolean(source.TG_TEST_ALLOW_SEND_CODE, testServers);
   var allowLogout = parseBoolean(source.TG_TEST_ALLOW_LOGOUT, false);
   var allowSend = parseBoolean(source.TG_TEST_ALLOW_SEND, false);
+  var targetPeer = String(source.TG_TEST_TARGET_PEER || "");
   var preferSignUp = parseBoolean(source.TG_TEST_PREFER_SIGN_UP, testServers);
   var missing = [];
   var errors = [];
@@ -88,6 +89,10 @@ function loadTelegramTestEnv(env) {
     errors.push("Production Telegram tests require TG_SESSION_STRING unless TG_TEST_ALLOW_SEND_CODE=1 is explicitly set.");
   }
 
+  if (!testServers && allowSend && (!targetPeer || targetPeer === "me")) {
+    errors.push("Production send tests require TG_TEST_TARGET_PEER to reference a real dialog; Saved Messages (`me`) is not supported by this Telegram send path.");
+  }
+
   return {
     enabled: parseBoolean(source.TG_TEST_ENABLE, false),
     apiId: apiId,
@@ -103,7 +108,7 @@ function loadTelegramTestEnv(env) {
     allowSendCode: allowSendCode,
     allowLogout: allowLogout,
     allowSend: allowSend,
-    targetPeer: String(source.TG_TEST_TARGET_PEER || "me"),
+    targetPeer: targetPeer,
     mutationTextPrefix: String(source.TG_TEST_MUTATION_TEXT_PREFIX || "[TG Pebble Test]"),
     preferSignUp: preferSignUp,
     connectionRetries: Number.isFinite(parseInteger(source.TG_TEST_CONNECTION_RETRIES))

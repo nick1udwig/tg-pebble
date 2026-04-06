@@ -250,10 +250,18 @@ The live mutation suite is also opt-in. To test a real send:
 
 ```bash
 TG_TEST_ALLOW_SEND=1
-TG_TEST_TARGET_PEER=me
+TG_TEST_TARGET_PEER=<real dialog target>
 ```
 
-By default this sends to `Saved Messages` (`me`), which is the safest live target. Each send uses a unique prefix/timestamp marker and verifies that the message appears in recent history. The default `test:telegram` command still runs this suite, but the mutation tests remain skipped unless you explicitly enable them.
+Use a dedicated target such as:
+
+- a second throwaway Telegram account
+- a dedicated private test group
+- a dedicated bot chat you control
+
+Do not use `me` / Saved Messages here. The live probe showed Telegram rejects that target for this MTProto `sendMessage` path with `PEER_ID_INVALID`.
+
+Each send uses a unique prefix/timestamp marker and verifies that the message appears in recent history. The default `test:telegram` command still runs this suite, but the mutation tests remain skipped unless you explicitly enable them.
 
 #### Create A Saved Session String
 
