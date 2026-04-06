@@ -12,6 +12,7 @@ import {
 
 const config = loadTelegramTestEnv();
 const describeIf = canRunTelegramTestEnv(config) ? describe : describe.skip;
+const itIf = (condition) => (condition ? it : it.skip);
 
 if (config.enabled && (config.missing.length > 0 || config.errors.length > 0)) {
   describe("Telegram Test DC auth integration config", () => {
@@ -29,12 +30,26 @@ if (config.enabled && (config.missing.length > 0 || config.errors.length > 0)) {
 
 describeIf("Telegram Test DC auth integration", () => {
   let loginClient;
-  let sessionString = "";
+  let sessionString = config.sessionString || "";
   let me;
+  let bootMode = "";
 
   beforeAll(async () => {
-    loginClient = createTelegramTestClient(config);
-    sessionString = await loginTelegramTestUser(loginClient, config);
+    loginClient = createTelegramTestClient(config, sessionString);
+
+    if (sessionString) {
+      const restored = await restoreTelegramTestSession(loginClient);
+      if (!restored) {
+        throw new Error("TG_SESSION_STRING is not authorized.");
+      }
+      bootMode = "session";
+    } else if (config.allowSendCode) {
+      sessionString = await loginTelegramTestUser(loginClient, config);
+      bootMode = "login";
+    } else {
+      throw new Error("No Telegram auth path configured.");
+    }
+
     me = await loginClient.getMe();
   }, 120_000);
 
@@ -42,11 +57,16 @@ describeIf("Telegram Test DC auth integration", () => {
     await disconnectTelegramTestClient(loginClient);
   });
 
-  it("logs in against the Telegram test environment", async () => {
+  it("connects with an authorized Telegram session", async () => {
     expect(sessionString.length).toBeGreaterThan(0);
     expect(await loginClient.isUserAuthorized()).toBe(true);
     expect(me).toBeTruthy();
     expect(me.id).toBeDefined();
+    expect(bootMode === "session" || bootMode === "login").toBe(true);
+  }, 120_000);
+
+  itIf(config.allowSendCode && !config.sessionString)("can establish a session via code login", async () => {
+    expect(bootMode).toBe("login");
   }, 120_000);
 
   it("restores a saved session string", async () => {
@@ -62,7 +82,7 @@ describeIf("Telegram Test DC auth integration", () => {
     }
   }, 120_000);
 
-  it("logs out and invalidates the saved session", async () => {
+  itIf(config.allowLogout)("logs out and invalidates the saved session", async () => {
     const logoutClient = createTelegramTestClient(config, sessionString);
     const staleClient = createTelegramTestClient(config, sessionString);
 

@@ -176,7 +176,10 @@ Run:
 npm run test:telegram
 ```
 
-This suite is opt-in and talks to Telegram's official test environment.
+This suite is opt-in. It can target either:
+
+- Telegram's official test environment
+- a live Telegram account when `TG_TEST_SERVERS=0`
 
 It only runs when all required environment variables are set and `TG_TEST_ENABLE=1`.
 
@@ -184,11 +187,15 @@ Required variables:
 
 - `TG_API_ID`
 - `TG_API_HASH`
-- `TG_TEST_PHONE`
-- `TG_TEST_CODE`
 
 Optional variables:
 
+- `TG_SESSION_STRING`
+- `TG_TEST_ALLOW_SEND_CODE`
+- `TG_TEST_ALLOW_LOGOUT`
+- `TG_TEST_PREFER_SIGN_UP`
+- `TG_TEST_PHONE`
+- `TG_TEST_CODE`
 - `TG_TEST_PASSWORD`
 - `TG_TEST_USE_WSS`
 - `TG_TEST_SERVERS`
@@ -206,6 +213,35 @@ Reference docs:
 
 - `https://core.telegram.org/api/obtaining_api_id`
 - `https://core.telegram.org/api/auth`
+
+#### Production-Safe Live Account Mode
+
+For a real throwaway Telegram account, the safe default is:
+
+- `TG_TEST_SERVERS=0`
+- `TG_SESSION_STRING=<saved authorized gramjs session>`
+- do not set `TG_TEST_ALLOW_SEND_CODE=1`
+- keep `TG_TEST_ALLOW_LOGOUT=0`
+
+This avoids:
+
+- sending a new login code on every test run
+- repeated sign-in churn against a live account
+- invalidating the live session with `auth.LogOut`
+
+If you run production Telegram tests without `TG_SESSION_STRING`, `scripts/test-telegram.sh` now refuses to start unless you explicitly opt into fresh code login with:
+
+```bash
+TG_TEST_ALLOW_SEND_CODE=1
+```
+
+Do not enable:
+
+```bash
+TG_TEST_ALLOW_LOGOUT=1
+```
+
+unless you intentionally want the suite to perform a real Telegram logout on that account.
 
 ### 4.5 Full Non-Emulator Test Pass
 

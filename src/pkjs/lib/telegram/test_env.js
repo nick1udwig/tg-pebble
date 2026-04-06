@@ -7,9 +7,7 @@ var StringSession = sessions.StringSession;
 
 var REQUIRED_ENV_KEYS = Object.freeze([
   "TG_API_ID",
-  "TG_API_HASH",
-  "TG_TEST_PHONE",
-  "TG_TEST_CODE"
+  "TG_API_HASH"
 ]);
 
 var PLACEHOLDER_PATTERNS = Object.freeze({
@@ -36,6 +34,11 @@ function loadTelegramTestEnv(env) {
   var apiId = parseInteger(source.TG_API_ID);
   var forceDcId = parseInteger(source.TG_TEST_FORCE_DC_ID);
   var forcePort = parseInteger(source.TG_TEST_FORCE_PORT);
+  var testServers = parseBoolean(source.TG_TEST_SERVERS, true);
+  var sessionString = String(source.TG_SESSION_STRING || "");
+  var allowSendCode = parseBoolean(source.TG_TEST_ALLOW_SEND_CODE, testServers);
+  var allowLogout = parseBoolean(source.TG_TEST_ALLOW_LOGOUT, false);
+  var preferSignUp = parseBoolean(source.TG_TEST_PREFER_SIGN_UP, testServers);
   var missing = [];
   var errors = [];
   var key;
@@ -70,17 +73,35 @@ function loadTelegramTestEnv(env) {
     }
   }
 
+  if (allowSendCode) {
+    if (!source.TG_TEST_PHONE) {
+      missing.push("TG_TEST_PHONE");
+    }
+
+    if (!source.TG_TEST_CODE) {
+      missing.push("TG_TEST_CODE");
+    }
+  }
+
+  if (!testServers && !sessionString && !allowSendCode) {
+    errors.push("Production Telegram tests require TG_SESSION_STRING unless TG_TEST_ALLOW_SEND_CODE=1 is explicitly set.");
+  }
+
   return {
     enabled: parseBoolean(source.TG_TEST_ENABLE, false),
     apiId: apiId,
     apiHash: String(source.TG_API_HASH || ""),
+    sessionString: sessionString,
     phoneNumber: String(source.TG_TEST_PHONE || ""),
     phoneCode: String(source.TG_TEST_CODE || ""),
     password: String(source.TG_TEST_PASSWORD || ""),
     firstName: String(source.TG_TEST_FIRST_NAME || "TG"),
     lastName: String(source.TG_TEST_LAST_NAME || "Pebble"),
     useWSS: parseBoolean(source.TG_TEST_USE_WSS, true),
-    testServers: parseBoolean(source.TG_TEST_SERVERS, true),
+    testServers: testServers,
+    allowSendCode: allowSendCode,
+    allowLogout: allowLogout,
+    preferSignUp: preferSignUp,
     connectionRetries: Number.isFinite(parseInteger(source.TG_TEST_CONNECTION_RETRIES))
       ? parseInteger(source.TG_TEST_CONNECTION_RETRIES)
       : 3,
@@ -193,14 +214,16 @@ async function loginTelegramTestUser(client, config) {
 
   phoneCodeHash = await sendTelegramTestCode(client, config);
 
-  try {
-    await signUpTelegramTestUser(client, config, phoneCodeHash);
-    return client.session.save();
-  } catch (error) {
-    signUpError = error;
-    if (!isExistingAccountError(error)) {
-      // Continue into sign-in anyway, to support cases where sign-up-first
-      // touches test-server state but the account already exists.
+  if (config.preferSignUp) {
+    try {
+      await signUpTelegramTestUser(client, config, phoneCodeHash);
+      return client.session.save();
+    } catch (error) {
+      signUpError = error;
+      if (!isExistingAccountError(error)) {
+        // Continue into sign-in anyway, to support cases where sign-up-first
+        // touches state but the account already exists or Telegram expects sign-in.
+      }
     }
   }
 
