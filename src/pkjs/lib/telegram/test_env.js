@@ -244,6 +244,24 @@ async function restoreTelegramTestSession(client) {
   return client.isUserAuthorized();
 }
 
+async function listTelegramDialogs(client, options) {
+  var params = options || {};
+
+  await ensureTelegramTestClientConnected(client);
+  return client.getDialogs({
+    limit: Number.isFinite(parseInteger(params.limit)) ? parseInteger(params.limit) : 20
+  });
+}
+
+async function getTelegramDialogMessages(client, entity, options) {
+  var params = options || {};
+
+  await ensureTelegramTestClientConnected(client);
+  return client.getMessages(entity, {
+    limit: Number.isFinite(parseInteger(params.limit)) ? parseInteger(params.limit) : 20
+  });
+}
+
 async function logoutTelegramTestUser(client) {
   await client.invoke(new Api.auth.LogOut());
 }
@@ -264,8 +282,10 @@ module.exports = {
   canRunTelegramTestEnv: canRunTelegramTestEnv,
   createTelegramTestClient: createTelegramTestClient,
   disconnectTelegramTestClient: disconnectTelegramTestClient,
+  getTelegramDialogMessages: getTelegramDialogMessages,
   loadTelegramTestEnv: loadTelegramTestEnv,
   loginTelegramTestUser: loginTelegramTestUser,
+  listTelegramDialogs: listTelegramDialogs,
   logoutTelegramTestUser: logoutTelegramTestUser,
   restoreTelegramTestSession: restoreTelegramTestSession
 };

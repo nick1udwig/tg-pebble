@@ -4,6 +4,8 @@ import {
   canRunTelegramTestEnv,
   createTelegramTestClient,
   disconnectTelegramTestClient,
+  getTelegramDialogMessages,
+  listTelegramDialogs,
   loadTelegramTestEnv,
   loginTelegramTestUser,
   logoutTelegramTestUser,
@@ -31,6 +33,7 @@ if (config.enabled && (config.missing.length > 0 || config.errors.length > 0)) {
 describeIf("Telegram Test DC auth integration", () => {
   let loginClient;
   let sessionString = config.sessionString || "";
+  let dialogs = [];
   let me;
   let bootMode = "";
 
@@ -51,6 +54,7 @@ describeIf("Telegram Test DC auth integration", () => {
     }
 
     me = await loginClient.getMe();
+    dialogs = await listTelegramDialogs(loginClient, { limit: 10 });
   }, 120_000);
 
   afterAll(async () => {
@@ -80,6 +84,31 @@ describeIf("Telegram Test DC auth integration", () => {
     } finally {
       await disconnectTelegramTestClient(restoredClient);
     }
+  }, 120_000);
+
+  it("lists recent dialogs with stable metadata", async () => {
+    expect(Array.isArray(dialogs)).toBe(true);
+    expect(dialogs.length).toBeGreaterThan(0);
+
+    expect(String(dialogs[0].id || "")).not.toBe("");
+    expect(typeof dialogs[0].name).toBe("string");
+    expect(dialogs[0].inputEntity || dialogs[0].entity).toBeTruthy();
+  }, 120_000);
+
+  it("fetches recent messages from a readable dialog", async () => {
+    const dialog = dialogs.find((entry) => entry && (entry.inputEntity || entry.entity));
+    let messages;
+
+    expect(dialog).toBeTruthy();
+
+    messages = await getTelegramDialogMessages(loginClient, dialog.inputEntity || dialog.entity, {
+      limit: 5,
+    });
+
+    expect(Array.isArray(messages)).toBe(true);
+    expect(messages.length).toBeGreaterThan(0);
+    expect(typeof messages[0].id).toBe("number");
+    expect(messages[0].date).toBeTruthy();
   }, 120_000);
 
   itIf(config.allowLogout)("logs out and invalidates the saved session", async () => {
