@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${TG_PEBBLE_SESSION_GUARDED:-0}" != "1" ]]; then
+  timeout_seconds="${TG_PEBBLE_EMULATOR_TIMEOUT_SECONDS:-1800}"
+  exec env TG_PEBBLE_SESSION_GUARDED=1 bash scripts/session-guard.sh \
+    pebble-emulator \
+    "${timeout_seconds}" \
+    "Pebble emulator smoke test" \
+    bash scripts/test-emulator.sh "$@"
+fi
+
 if ! command -v pebble >/dev/null 2>&1; then
   echo "pebble-tool is not installed. Install the RePebble SDK toolchain before running emulator tests." >&2
   exit 2

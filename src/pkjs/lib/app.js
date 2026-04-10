@@ -22,10 +22,15 @@ function createPkjsApp(options) {
     cache.setSession(options.initialSession);
   }
 
+  function hasLiveSession() {
+    var session = cache.getSession();
+    return !!(session && session.sessionString);
+  }
+
   function ensureFixtureCache() {
     var fixtureState;
 
-    if (cache.getChatList().length > 0) {
+    if (cache.getChatList().length > 0 || hasLiveSession()) {
       return;
     }
 
@@ -64,6 +69,19 @@ function createPkjsApp(options) {
     }
 
     return telegramAdapterFactory(session);
+  }
+
+  function getConfigState() {
+    var settings = cache.getSettings();
+    var session = cache.getSession() || {};
+
+    return {
+      phoneNumber: String(session.phoneNumber || ""),
+      sendMode: settings.sendMode,
+      previewChatMessage: settings.previewChatMessage === true,
+      hasSession: !!session.sessionString,
+      accountLabel: String(session.accountLabel || "")
+    };
   }
 
   function buildCurrentChatListPayload() {
@@ -247,6 +265,10 @@ function createPkjsApp(options) {
     refreshFailed: function() {
       return this.setSyncState(SyncEvent.refreshError);
     },
+    clearCache: function() {
+      cache.clearChatsAndMessages();
+      syncState = SyncState.desynced;
+    },
     rehydrateFixtures: async function() {
       cache.clearChatsAndMessages();
       ensureFixtureCache();
@@ -260,6 +282,15 @@ function createPkjsApp(options) {
     },
     setPreviewChatMessage: function(previewChatMessage) {
       return cache.setSettings({ previewChatMessage: previewChatMessage === true });
+    },
+    getSession: function() {
+      return cache.getSession();
+    },
+    setSession: function(session) {
+      return cache.setSession(session);
+    },
+    getConfigState: function() {
+      return getConfigState();
     },
     sendMessage: async function(chatId, text) {
       var chatList;

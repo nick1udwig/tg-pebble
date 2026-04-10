@@ -16,6 +16,7 @@ This runbook covers:
 3. running the Pebble emulator locally
 4. taking screenshots from the emulator
 5. known gotchas and workarounds
+6. guarding against runaway agent sessions on shared VPS hosts
 
 ## 2. Official References
 
@@ -330,6 +331,44 @@ This runs:
 - C tests
 - config-page browser tests
 
+#### Guardrails For Heavy Sessions
+
+This repo now treats emulator and browser-agent work as serialized resources.
+
+Why:
+
+- multiple `pebble build` / `qemu-pebble` / `pypkjs` sessions can saturate a small VPS
+- multiple `agent-browser` sessions can do the same
+- abandoned agent processes are easy to miss and hard to clean up manually
+
+The repo now provides lock-based wrappers and cleanup commands to reduce that risk.
+
+Lock location:
+
+```bash
+/tmp/tg-pebble-locks
+```
+
+Default timeouts:
+
+- Pebble emulator paths: `1800` seconds
+- `agent-browser` paths: `1200` seconds
+
+Override when needed:
+
+```bash
+TG_PEBBLE_EMULATOR_TIMEOUT_SECONDS=900
+TG_PEBBLE_AGENT_BROWSER_TIMEOUT_SECONDS=600
+```
+
+Recovery command:
+
+```bash
+npm run cleanup:sessions
+```
+
+That command kills tracked process groups, removes stale lock metadata, and cleans up common leftovers such as `qemu-pebble`, `pypkjs`, `pebble transcribe`, and `agent-browser`.
+
 ### 4.5 Build The Pebble App
 
 Run:
@@ -347,6 +386,8 @@ Run:
 ```bash
 npm run test:emulator
 ```
+
+This script is self-guarding. If another Pebble emulator session is already running, it fails fast instead of starting a second QEMU/PKJS stack.
 
 This now performs a real smoke pass:
 
@@ -376,10 +417,16 @@ Artifacts are written to:
 
 #### Desktop Session
 
+Preferred command:
+
+```bash
+npm run run:emulator -- basalt
+```
+
 If you have a working X11 desktop session:
 
 ```bash
-pebble install --emulator basalt
+npm run run:emulator -- basalt
 ```
 
 #### Headless / SSH Session
@@ -389,6 +436,8 @@ Use the helper script:
 ```bash
 scripts/run-emulator.sh basalt
 ```
+
+`scripts/run-emulator.sh` is also self-guarding and uses the same shared Pebble lock as `npm run test:emulator`.
 
 This is still useful for quick manual inspection, but the more reliable headless automation path now uses:
 
@@ -462,6 +511,28 @@ The official emulator docs map watch buttons to keyboard input as follows:
 
 Those keys are what the monitor helper injects through `sendkey`.
 
+#### Safe `agent-browser` Usage
+
+Do not run raw `agent-browser` directly from this repo on a shared VPS.
+
+Use:
+
+```bash
+scripts/run-agent-browser-safe.sh <agent-browser args...>
+```
+
+This wrapper:
+
+- acquires the shared `agent-browser` lock
+- records lock metadata in `/tmp/tg-pebble-locks`
+- kills the whole browser-agent process group when the timeout expires
+
+If the wrapper refuses to start, inspect the lock metadata or clear the old session with:
+
+```bash
+npm run cleanup:sessions
+```
+
 ## 5. Pebble Screenshot And Screendumps
 
 ### 5.1 Is `pebble screenshot` usable?
@@ -504,6 +575,25 @@ PY
 This avoids the `pebble --emulator` reconnection edge cases entirely while still producing a normal PNG artifact.
 
 ## 6. Gotchas And Workarounds
+
+### 6.0 Multiple heavyweight agent sessions can wedge a VPS
+
+The failure mode that prompted these guard scripts was overlapping sessions of:
+
+- `pebble build`
+- `qemu-pebble`
+- `pypkjs`
+- `pebble transcribe`
+- `agent-browser`
+
+The practical rule going forward is:
+
+- use `npm run run:emulator -- basalt` or `scripts/run-emulator.sh basalt` instead of raw `pebble install --emulator ...`
+- use `npm run test:emulator` instead of manually stacking QEMU and PKJS sessions unless you are debugging the harness itself
+- use `scripts/run-agent-browser-safe.sh ...` instead of raw `agent-browser ...`
+- use `npm run cleanup:sessions` before retrying after a bad session
+
+These wrappers are not a substitute for judgment, but they do stop the most common bad behavior: spawning another heavyweight session on top of one that is already alive.
 
 ### 6.1 `--emulator` reconnects are sensitive to VNC state
 

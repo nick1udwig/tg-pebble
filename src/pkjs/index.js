@@ -1,11 +1,13 @@
 var appLib = require("./lib/app");
+var configPageLib = require("./lib/config_page");
 var protocol = require("./lib/protocol");
 var syncStateLib = require("./lib/sync_state");
-var telegram = require("telegram");
-var sessions = require("telegram/sessions");
 var telegramAdapterLib = require("./lib/telegram/adapter");
+var telegramAuthLib = require("./lib/telegram/auth");
 
 var createPkjsApp = appLib.createPkjsApp;
+var buildConfigPageUrl = configPageLib.buildConfigPageUrl;
+var parseConfigPageResponse = configPageLib.parseConfigPageResponse;
 var encodeMessage = protocol.encodeMessage;
 var MessageType = protocol.MessageType;
 var serializeChatItem = protocol.serializeChatItem;
@@ -13,9 +15,10 @@ var serializeMessageItem = protocol.serializeMessageItem;
 var serializeSettingsState = protocol.serializeSettingsState;
 var serializeSendResult = protocol.serializeSendResult;
 var SyncState = syncStateLib.SyncState;
-var TelegramClient = telegram.TelegramClient;
-var StringSession = sessions.StringSession;
 var createTelegramAdapter = telegramAdapterLib.createTelegramAdapter;
+var authorizeTelegramSession = telegramAuthLib.authorizeTelegramSession;
+var createTelegramClient = telegramAuthLib.createTelegramClient;
+var revokeTelegramSession = telegramAuthLib.revokeTelegramSession;
 
 function parseBoolean(value, fallback) {
   if (value === undefined || value === null || value === "") {
@@ -40,7 +43,8 @@ function loadTelegramEnvConfig() {
     apiHash: apiHash,
     sessionString: sessionString,
     useWSS: parseBoolean(source.TG_TEST_USE_WSS, true),
-    testServers: parseBoolean(source.TG_TEST_SERVERS, false)
+    testServers: parseBoolean(source.TG_TEST_SERVERS, false),
+    configUrl: String(source.TG_CONFIG_URL || "http://127.0.0.1:4173")
   };
 }
 
@@ -51,18 +55,12 @@ function createTelegramClientFactory(config) {
 
   return function(session) {
     var sessionValue = typeof session === "string" ? session : (session && session.sessionString) || "";
-
-    return new TelegramClient(new StringSession(sessionValue), config.apiId, config.apiHash, {
-      connectionRetries: 3,
-      requestRetries: 3,
-      reconnectRetries: 0,
-      useWSS: config.useWSS,
-      testServers: config.testServers
-    });
+    return createTelegramClient(config, sessionValue);
   };
 }
 
 var telegramEnvConfig = loadTelegramEnvConfig();
+var telegramClientFactory = createTelegramClientFactory(telegramEnvConfig);
 
 var app = createPkjsApp({
   storage: typeof localStorage !== "undefined" ? localStorage : null,
@@ -71,7 +69,7 @@ var app = createPkjsApp({
     return createTelegramAdapter({
       enabled: true,
       sessionString: session && session.sessionString ? session.sessionString : "",
-      clientFactory: createTelegramClientFactory(telegramEnvConfig)
+      clientFactory: telegramClientFactory
     });
   } : null
 });
@@ -108,6 +106,31 @@ function sendEnvelope(type, payloadString, requestId, syncState, onSuccess, onEr
       log("sendAppMessage failed", error);
     }
   );
+}
+
+function sendSettingsState(syncState) {
+  sendEnvelope(
+    MessageType.settingsState,
+    serializeSettingsState(app.getSettingsState()),
+    0,
+    syncState || app.getSyncState()
+  );
+}
+
+function rememberPhoneNumber(phoneNumber) {
+  var nextPhoneNumber = String(phoneNumber || "").trim();
+  var currentSession = app.getSession() || {};
+
+  if (!nextPhoneNumber) {
+    return;
+  }
+
+  app.setSession({
+    sessionString: currentSession.sessionString || "",
+    phoneNumber: nextPhoneNumber,
+    accountLabel: currentSession.accountLabel || "",
+    userId: currentSession.userId || ""
+  });
 }
 
 function sendChatItems(chats, index, onComplete, onError) {
@@ -198,6 +221,89 @@ async function sendChatPage(chatId) {
   });
 }
 
+async function handleConfigSave(state) {
+  var nextState = state || {};
+
+  if (nextState.sendMode) {
+    app.setSendMode(nextState.sendMode);
+  }
+  app.setPreviewChatMessage(nextState.previewChatMessage === true);
+  rememberPhoneNumber(nextState.phoneNumber);
+
+  if (nextState.phoneNumber && nextState.loginCode) {
+    if (!telegramEnvConfig || typeof telegramClientFactory !== "function") {
+      app.refreshFailed();
+      sendSettingsState(SyncState.desynced);
+      return;
+    }
+
+    app.refreshStarted();
+    sendEnvelope(MessageType.syncStatus, "", 0, SyncState.syncing);
+
+    try {
+      app.setSession(await authorizeTelegramSession(telegramEnvConfig, nextState, telegramClientFactory));
+      app.clearCache();
+      await sendChatList();
+    } catch (error) {
+      log("Telegram config auth failed", error);
+      app.refreshFailed();
+      sendSettingsState(SyncState.desynced);
+      sendEnvelope(MessageType.syncStatus, "", 0, SyncState.desynced);
+    }
+    return;
+  }
+
+  sendSettingsState(app.getSyncState());
+}
+
+async function handleLogoutAction() {
+  var currentSession = app.getSession();
+
+  if (telegramEnvConfig && currentSession && currentSession.sessionString) {
+    try {
+      await revokeTelegramSession(telegramEnvConfig, currentSession.sessionString, telegramClientFactory);
+    } catch (error) {
+      log("Telegram logout failed", error);
+    }
+  }
+
+  app.logout();
+  sendEnvelope(
+    MessageType.settingsState,
+    serializeSettingsState({ sendMode: "preview", previewChatMessage: false }),
+    0,
+    SyncState.desynced,
+    function() {
+      sendEnvelope(MessageType.chatListComplete, "0", 0, SyncState.desynced);
+    }
+  );
+}
+
+async function handleConfigAction(actionPayload) {
+  var action = actionPayload && actionPayload.action ? String(actionPayload.action) : "";
+  var state = actionPayload && actionPayload.state ? actionPayload.state : {};
+
+  switch (action) {
+    case "config:save":
+    case "auth:save":
+      await handleConfigSave(state);
+      break;
+    case "settings:update":
+      await handleConfigSave(state);
+      break;
+    case "cache:clear":
+      app.clearCache();
+      app.refreshStarted();
+      await sendChatList();
+      break;
+    case "auth:logout":
+      await handleLogoutAction();
+      break;
+    default:
+      break;
+  }
+}
+
 async function handleRequest(payload) {
   var type = readPayloadValue(payload, 0, "MessageType");
   var payloadString = readPayloadValue(payload, 1, "PayloadJson");
@@ -245,15 +351,15 @@ async function handleRequest(payload) {
     }
     case MessageType.toggleSendMode:
       app.setSendMode(payloadString);
-      sendEnvelope(MessageType.settingsState, serializeSettingsState(app.getSettingsState()), 0, app.getSyncState());
+      sendSettingsState(app.getSyncState());
       break;
     case MessageType.toggleChatPreview:
       app.setPreviewChatMessage(payloadString === "1" || payloadString === "true" || payloadString === "on");
-      sendEnvelope(MessageType.settingsState, serializeSettingsState(app.getSettingsState()), 0, app.getSyncState());
+      sendSettingsState(app.getSyncState());
       break;
     case MessageType.clearCache:
       app.refreshStarted();
-      await app.rehydrateFixtures();
+      app.clearCache();
       setTimeout(function() {
         sendChatList().catch(function(error) {
           log("sendChatList failed", error);
@@ -262,16 +368,7 @@ async function handleRequest(payload) {
       }, 120);
       break;
     case MessageType.logout:
-      app.logout();
-      sendEnvelope(
-        MessageType.settingsState,
-        serializeSettingsState({ sendMode: "preview", previewChatMessage: false }),
-        0,
-        SyncState.desynced,
-        function() {
-        sendEnvelope(MessageType.chatListComplete, "0", 0, SyncState.desynced);
-        }
-      );
+      await handleLogoutAction();
       break;
     default:
       log("unhandled request", { type: type, payloadString: payloadString });
@@ -293,13 +390,26 @@ if (typeof Pebble !== "undefined" && Pebble.addEventListener) {
   });
 
   Pebble.addEventListener("showConfiguration", function() {
-    var configUrl = "http://127.0.0.1:4173";
+    var configUrl = buildConfigPageUrl(
+      telegramEnvConfig && telegramEnvConfig.configUrl ? telegramEnvConfig.configUrl : "http://127.0.0.1:4173",
+      app.getConfigState()
+    );
     log("showConfiguration", { configUrl: configUrl });
     Pebble.openURL(configUrl);
   });
 
   Pebble.addEventListener("webviewclosed", function(event) {
-    log("webviewclosed", { response: event && event.response ? event.response : null });
+    var response = parseConfigPageResponse(event && event.response ? event.response : null);
+
+    log("webviewclosed", { response: response });
+    if (!response) {
+      return;
+    }
+
+    Promise.resolve(handleConfigAction(response)).catch(function(error) {
+      log("config action failed", error);
+      app.refreshFailed();
+    });
   });
 }
 

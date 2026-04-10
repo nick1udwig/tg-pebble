@@ -15,7 +15,8 @@ const MIME_TYPES = {
 };
 
 const server = createServer(async (request, response) => {
-  const requestPath = request.url === "/" ? "/index.html" : request.url;
+  const requestUrl = new URL(request.url ?? "/", `http://${request.headers.host ?? "127.0.0.1"}`);
+  const requestPath = requestUrl.pathname === "/" ? "/index.html" : requestUrl.pathname;
   const normalizedPath = normalize(requestPath).replace(/^(\.\.[/\\])+/, "");
   const filePath = join(process.cwd(), root, normalizedPath);
 

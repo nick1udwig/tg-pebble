@@ -6,14 +6,35 @@ const DEFAULT_STATE = Object.freeze({
   password: "",
   sendMode: "preview",
   previewChatMessage: false,
+  hasSession: false,
+  accountLabel: "",
 });
+
+function readEmbeddedState() {
+  try {
+    const params = new URLSearchParams(globalThis.location?.search ?? "");
+    const raw = params.get("state");
+    return raw ? JSON.parse(decodeURIComponent(raw)) : {};
+  } catch (_error) {
+    return {};
+  }
+}
 
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? { ...DEFAULT_STATE, ...JSON.parse(raw) } : { ...DEFAULT_STATE };
+    const stored = raw ? JSON.parse(raw) : {};
+    const embedded = readEmbeddedState();
+
+    return {
+      ...DEFAULT_STATE,
+      ...stored,
+      ...embedded,
+      loginCode: "",
+      password: "",
+    };
   } catch (_error) {
-    return { ...DEFAULT_STATE };
+    return { ...DEFAULT_STATE, ...readEmbeddedState(), loginCode: "", password: "" };
   }
 }
 
@@ -22,8 +43,16 @@ function saveState(state) {
 }
 
 function getBridge() {
-  return globalThis.PebbleConfigBridge ?? {
-    submit(_payload) {},
+  if (globalThis.PebbleConfigBridge && typeof globalThis.PebbleConfigBridge.submit === "function") {
+    return globalThis.PebbleConfigBridge;
+  }
+
+  return {
+    submit(payload) {
+      try {
+        globalThis.location.href = "pebblejs://close#" + encodeURIComponent(JSON.stringify(payload));
+      } catch (_error) {}
+    },
   };
 }
 
@@ -31,6 +60,27 @@ function setStatus(message, kind = "info") {
   const banner = document.querySelector("#status-banner");
   banner.textContent = message;
   banner.dataset.kind = kind;
+}
+
+function setSessionState(state) {
+  const label = document.querySelector("#session-state");
+  const hasSession = state.hasSession === true;
+  const accountLabel = String(state.accountLabel ?? "").trim();
+
+  if (hasSession && accountLabel) {
+    label.textContent = `Session active: ${accountLabel}`;
+    label.dataset.kind = "success";
+    return;
+  }
+
+  if (hasSession) {
+    label.textContent = "Telegram session active.";
+    label.dataset.kind = "success";
+    return;
+  }
+
+  label.textContent = "No Telegram session stored.";
+  label.dataset.kind = "info";
 }
 
 function readFormState() {
@@ -50,6 +100,7 @@ function writeFormState(state) {
   document.querySelector(`#send-mode-${state.sendMode}`)?.setAttribute("checked", "checked");
   document.querySelector(`#send-mode-${state.sendMode}`)?.click();
   document.querySelector("#preview-chat-message").checked = state.previewChatMessage === true;
+  setSessionState(state);
 }
 
 function reveal(buttonId) {
@@ -60,41 +111,35 @@ function hide(buttonId) {
   document.querySelector(buttonId).classList.add("hidden");
 }
 
-function validateLogin(state) {
-  return state.phoneNumber.length > 0 && state.loginCode.length > 0;
-}
-
 function bootstrap() {
   const state = loadState();
   writeFormState(state);
+  setStatus(state.hasSession ? "Current PKJS session loaded." : "Save changes to update settings or sign in.");
 
   document.querySelectorAll('input[name="send-mode"]').forEach((node) => {
     node.addEventListener("change", () => {
       const nextState = readFormState();
       saveState(nextState);
-      getBridge().submit({ action: "settings:update", state: nextState });
-      setStatus(`Send mode saved: ${nextState.sendMode}`, "success");
+      setStatus(`Send mode saved locally: ${nextState.sendMode}`, "success");
     });
   });
 
   document.querySelector("#preview-chat-message").addEventListener("change", () => {
     const nextState = readFormState();
     saveState(nextState);
-    getBridge().submit({ action: "settings:update", state: nextState });
-    setStatus(`Chat previews ${nextState.previewChatMessage ? "enabled" : "disabled"}.`, "success");
+    setStatus(`Chat previews ${nextState.previewChatMessage ? "enabled" : "disabled"} locally.`, "success");
   });
 
   document.querySelector("#save-login").addEventListener("click", () => {
     const nextState = readFormState();
-
-    if (!validateLogin(nextState)) {
-      setStatus("Phone number and login code are required.", "error");
-      return;
-    }
-
     saveState(nextState);
-    getBridge().submit({ action: "auth:save", state: nextState });
-    setStatus("Login details saved locally.", "success");
+    getBridge().submit({ action: "config:save", state: nextState });
+    setStatus(
+      nextState.phoneNumber && nextState.loginCode
+        ? "Closing to save settings and sign in."
+        : "Closing to save settings.",
+      "success",
+    );
   });
 
   document.querySelector("#clear-cache").addEventListener("click", () => {

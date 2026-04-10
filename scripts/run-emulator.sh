@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${TG_PEBBLE_SESSION_GUARDED:-0}" != "1" ]]; then
+  exec env TG_PEBBLE_SESSION_GUARDED=1 bash scripts/run-emulator-safe.sh "$@"
+fi
+
 platform="${1:-basalt}"
 
 if ! command -v pebble >/dev/null 2>&1; then

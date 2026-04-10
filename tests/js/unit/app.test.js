@@ -41,6 +41,22 @@ describe("createPkjsApp", () => {
     expect(app.getSettingsState()).toEqual({ sendMode: "auto", previewChatMessage: true });
   });
 
+  it("exposes config state from cached settings and session metadata", () => {
+    const app = createPkjsApp({ storage: createMemoryStorage() });
+
+    app.setSendMode("auto");
+    app.setPreviewChatMessage(true);
+    app.setSession({ sessionString: "saved-session", phoneNumber: "+15551234567", accountLabel: "Alice Example" });
+
+    expect(app.getConfigState()).toEqual({
+      phoneNumber: "+15551234567",
+      sendMode: "auto",
+      previewChatMessage: true,
+      hasSession: true,
+      accountLabel: "Alice Example",
+    });
+  });
+
   it("appends a fixture outgoing message on successful send", async () => {
     const app = createPkjsApp({ storage: createMemoryStorage() });
     const before = (await app.getChatPage(1001)).messages.length;
@@ -122,5 +138,54 @@ describe("createPkjsApp", () => {
       text: "Reply",
       outgoing: true,
     });
+  });
+
+  it("clears cached chats and messages without dropping the live session", async () => {
+    const app = createPkjsApp({
+      storage: createMemoryStorage(),
+      initialSession: { sessionString: "live-session", phoneNumber: "+15551234567" },
+      telegramAdapterFactory() {
+        return {
+          isConfigured() {
+            return true;
+          },
+          async hydrateChatList() {
+            return {
+              chats: [
+                { id: 7, remoteId: "user:42", title: "Live Alice", preview: "Latest", unreadCount: 1 },
+              ],
+              chatRefs: {
+                7: { peerKey: "user:42", peerType: "user", peerId: "42", accessHash: "123" },
+              },
+            };
+          },
+          async hydrateChatPage() {
+            return {
+              chatId: 7,
+              messages: [
+                {
+                  senderId: "42",
+                  senderName: "Live Alice",
+                  outgoing: false,
+                  text: "Latest",
+                  showSender: true,
+                },
+              ],
+            };
+          },
+          async sendTextMessage() {
+            return { ok: true, messageId: 10 };
+          },
+        };
+      },
+    });
+
+    await app.bootstrap();
+    await app.getChatPage(7);
+    app.clearCache();
+
+    expect(app.getSession()).toMatchObject({ sessionString: "live-session" });
+    expect(app.cache.getChatList()).toEqual([]);
+    expect(app.cache.getMessagePages()).toEqual({});
   });
 });
