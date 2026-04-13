@@ -20,6 +20,11 @@ if ! command -v ss >/dev/null 2>&1; then
   exit 2
 fi
 
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "python3 is required for emulator storage helpers." >&2
+  exit 2
+fi
+
 if ! command -v xauth >/dev/null 2>&1; then
   echo "xauth is not installed. Install xauth if you need xvfb-run support." >&2
 fi
@@ -67,6 +72,10 @@ fi
 
 if [[ "${reset_app_storage}" == "1" || "${reset_app_storage}" == "true" ]]; then
   ./scripts/reset-emulator-app-storage.sh "${platform}" >/dev/null
+fi
+
+if [[ "${fixture_mode}" != "1" && "${fixture_mode}" != "true" ]]; then
+  python3 ./scripts/seed-emulator-telegram-config.py "${platform}"
 fi
 
 ./scripts/build-telegram-runtime.sh >/dev/null

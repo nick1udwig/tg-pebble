@@ -471,6 +471,14 @@ TG_SESSION_STRING=...
 npm run run:emulator:live -- basalt
 ```
 
+If you want a real logged-out emulator that can sign in through the config page, omit `TG_SESSION_STRING` and provide just the API credentials:
+
+```bash
+TG_API_ID=...
+TG_API_HASH=...
+npm run run:emulator:live -- basalt
+```
+
 To run that same live session in a native emulator window instead of VNC:
 
 ```bash
@@ -493,7 +501,9 @@ Notes:
 - `run:emulator:live` sets `TG_PEBBLE_FIXTURE_MODE=0`, so PKJS does not seed fixture chats.
 - `run:emulator:window` and `run:emulator:live:window` set `TG_PEBBLE_EMULATOR_VNC=0`, so the emulator opens a local window instead of binding VNC.
 - live emulator launch now clears this app's persisted emulator local storage by default, so stale fixture data does not bleed into a real-session run.
+- live emulator launch seeds Telegram runtime config into the emulator app's own PKJS `localStorage` before boot, because pypkjs does not expose `process.env` directly inside the emulator JS runtime.
 - the live emulator path is best paired with a saved session string; that avoids repeated login-code churn inside emulator testing.
+- the first live launch after a storage reset requires `TG_API_ID` and `TG_API_HASH`; after that, you can preserve the seeded runtime config by setting `TG_PEBBLE_EMULATOR_RESET_APP_STORAGE=0`.
 - `npm run test:emulator` remains fixture-backed on purpose.
 
 ```bash

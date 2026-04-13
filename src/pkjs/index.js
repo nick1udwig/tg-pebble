@@ -1,6 +1,7 @@
 var appLib = require("./lib/app");
 var configPageLib = require("./lib/config_page");
 var protocol = require("./lib/protocol");
+var runtimeConfigLib = require("./lib/runtime_config");
 var syncStateLib = require("./lib/sync_state");
 var telegramAdapterLib = require("./lib/telegram/adapter");
 var telegramAuthLib = require("./lib/telegram/auth");
@@ -10,6 +11,7 @@ var buildConfigPageUrl = configPageLib.buildConfigPageUrl;
 var parseConfigPageResponse = configPageLib.parseConfigPageResponse;
 var encodeMessage = protocol.encodeMessage;
 var MessageType = protocol.MessageType;
+var loadTelegramRuntimeConfig = runtimeConfigLib.loadTelegramRuntimeConfig;
 var serializeChatItem = protocol.serializeChatItem;
 var serializeMessageItem = protocol.serializeMessageItem;
 var serializeSettingsState = protocol.serializeSettingsState;
@@ -20,40 +22,12 @@ var authorizeTelegramSession = telegramAuthLib.authorizeTelegramSession;
 var createTelegramClient = telegramAuthLib.createTelegramClient;
 var revokeTelegramSession = telegramAuthLib.revokeTelegramSession;
 
-function parseBoolean(value, fallback) {
-  if (value === undefined || value === null || value === "") {
-    return fallback;
-  }
-
-  return value === true || value === "1" || value === "true" || value === "yes" || value === "on";
-}
-
 function getErrorMessage(error, fallback) {
   if (error && error.message) {
     return String(error.message);
   }
 
   return String(fallback || "Unknown error.");
-}
-
-function loadTelegramEnvConfig() {
-  var source = typeof process !== "undefined" && process && process.env ? process.env : {};
-  var apiId = Number.parseInt(String(source.TG_API_ID || ""), 10);
-  var apiHash = String(source.TG_API_HASH || "");
-  var sessionString = String(source.TG_SESSION_STRING || "");
-
-  if (!Number.isFinite(apiId) || !apiHash) {
-    return null;
-  }
-
-  return {
-    apiId: apiId,
-    apiHash: apiHash,
-    sessionString: sessionString,
-    useWSS: parseBoolean(source.TG_TEST_USE_WSS, true),
-    testServers: parseBoolean(source.TG_TEST_SERVERS, false),
-    configUrl: String(source.TG_CONFIG_URL || "http://127.0.0.1:4173")
-  };
 }
 
 function createTelegramClientFactory(config) {
@@ -79,14 +53,17 @@ function buildSettingsStatePayload() {
   };
 }
 
-var telegramEnvConfig = loadTelegramEnvConfig();
-var telegramClientFactory = createTelegramClientFactory(telegramEnvConfig);
+var pkjsStorage = typeof localStorage !== "undefined" ? localStorage : null;
+var telegramRuntimeConfig = loadTelegramRuntimeConfig({ storage: pkjsStorage });
+var telegramClientFactory = createTelegramClientFactory(telegramRuntimeConfig);
 
 var app = createPkjsApp({
-  storage: typeof localStorage !== "undefined" ? localStorage : null,
+  storage: pkjsStorage,
   fixtureMode: false,
-  initialSession: telegramEnvConfig && telegramEnvConfig.sessionString ? { sessionString: telegramEnvConfig.sessionString } : null,
-  telegramAdapterFactory: telegramEnvConfig ? function(session) {
+  initialSession: telegramRuntimeConfig && telegramRuntimeConfig.sessionString
+    ? { sessionString: telegramRuntimeConfig.sessionString }
+    : null,
+  telegramAdapterFactory: telegramRuntimeConfig ? function(session) {
     return createTelegramAdapter({
       enabled: true,
       sessionString: session && session.sessionString ? session.sessionString : "",
@@ -252,7 +229,7 @@ async function handleConfigSave(state) {
   rememberPhoneNumber(nextState.phoneNumber);
 
   if (nextState.phoneNumber && nextState.loginCode) {
-    if (!telegramEnvConfig || typeof telegramClientFactory !== "function") {
+    if (!telegramRuntimeConfig || typeof telegramClientFactory !== "function") {
       app.setAuthError("Telegram auth is not configured in this build.");
       app.refreshFailed();
       sendSettingsState(SyncState.desynced);
@@ -264,7 +241,7 @@ async function handleConfigSave(state) {
     sendEnvelope(MessageType.syncStatus, "", 0, SyncState.syncing);
 
     try {
-      app.setSession(await authorizeTelegramSession(telegramEnvConfig, nextState, telegramClientFactory));
+      app.setSession(await authorizeTelegramSession(telegramRuntimeConfig, nextState, telegramClientFactory));
       app.clearAuthError();
       app.clearCache();
       await sendChatList();
@@ -284,9 +261,9 @@ async function handleConfigSave(state) {
 async function handleLogoutAction() {
   var currentSession = app.getSession();
 
-  if (telegramEnvConfig && currentSession && currentSession.sessionString) {
+  if (telegramRuntimeConfig && currentSession && currentSession.sessionString) {
     try {
-      await revokeTelegramSession(telegramEnvConfig, currentSession.sessionString, telegramClientFactory);
+      await revokeTelegramSession(telegramRuntimeConfig, currentSession.sessionString, telegramClientFactory);
     } catch (error) {
       log("Telegram logout failed", error);
     }
@@ -404,7 +381,10 @@ async function handleRequest(payload) {
 
 if (typeof Pebble !== "undefined" && Pebble.addEventListener) {
   Pebble.addEventListener("ready", function() {
-    log("ready");
+    log("ready", {
+      runtimeConfigSource: telegramRuntimeConfig ? telegramRuntimeConfig.source : "none",
+      hasSession: !!(app.getSession() && app.getSession().sessionString)
+    });
     app.refreshStarted();
   });
 
@@ -417,7 +397,7 @@ if (typeof Pebble !== "undefined" && Pebble.addEventListener) {
 
   Pebble.addEventListener("showConfiguration", function() {
     var configUrl = buildConfigPageUrl(
-      telegramEnvConfig && telegramEnvConfig.configUrl ? telegramEnvConfig.configUrl : "http://127.0.0.1:4173",
+      telegramRuntimeConfig && telegramRuntimeConfig.configUrl ? telegramRuntimeConfig.configUrl : "http://127.0.0.1:4173",
       app.getConfigState()
     );
     log("showConfiguration", { configUrl: configUrl });
