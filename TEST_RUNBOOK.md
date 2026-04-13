@@ -458,6 +458,33 @@ scripts/run-emulator.sh basalt
 
 This is still useful for quick manual inspection, but the more reliable headless automation path now uses:
 
+#### Live Telegram Session In The Emulator
+
+The default manual emulator command stays fixture-backed.
+
+To run the emulator against a real Telegram session:
+
+```bash
+TG_API_ID=...
+TG_API_HASH=...
+TG_SESSION_STRING=...
+npm run run:emulator:live -- basalt
+```
+
+You can create `TG_SESSION_STRING` with:
+
+```bash
+TG_API_ID=...
+TG_API_HASH=...
+npm run telegram:session
+```
+
+Notes:
+
+- `run:emulator:live` sets `TG_PEBBLE_FIXTURE_MODE=0`, so PKJS does not seed fixture chats.
+- the live emulator path is best paired with a saved session string; that avoids repeated login-code churn inside emulator testing.
+- `npm run test:emulator` remains fixture-backed on purpose.
+
 ```bash
 bash scripts/start-qemu-pkjs-session.sh basalt build/tg-pebble.pbw build/tests/emulator-session.json
 ```
