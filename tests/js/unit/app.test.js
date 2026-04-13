@@ -165,6 +165,48 @@ describe("createPkjsApp", () => {
     });
   });
 
+  it("replaces a cached fixture session when a live session is provided", async () => {
+    const storage = createMemoryStorage();
+    const fixtureApp = createPkjsApp({ storage });
+
+    await fixtureApp.bootstrap();
+    expect(fixtureApp.getSession()).toMatchObject({
+      fixtureSession: true,
+    });
+
+    const liveApp = createPkjsApp({
+      storage,
+      initialSession: { sessionString: "live-session", phoneNumber: "+15551234567" },
+      telegramAdapterFactory() {
+        return {
+          isConfigured() {
+            return true;
+          },
+          async hydrateChatList() {
+            return {
+              chats: [
+                { id: 7, remoteId: "user:42", title: "Live Alice", preview: "Latest", unreadCount: 1 },
+              ],
+              chatRefs: {
+                7: { peerKey: "user:42", peerType: "user", peerId: "42", accessHash: "123" },
+              },
+            };
+          },
+        };
+      },
+    });
+
+    const chatList = await liveApp.bootstrap();
+
+    expect(liveApp.getSession()).toMatchObject({
+      sessionString: "live-session",
+      phoneNumber: "+15551234567",
+    });
+    expect(chatList.chats).toEqual([
+      { id: 7, remoteId: "user:42", title: "Live Alice", preview: "Latest", unreadCount: 1 },
+    ]);
+  });
+
   it("clears cached chats and messages without dropping the live session", async () => {
     const app = createPkjsApp({
       storage: createMemoryStorage(),

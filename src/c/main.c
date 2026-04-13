@@ -561,6 +561,7 @@ static int16_t prv_chat_get_cell_height(struct MenuLayer *menu_layer, MenuIndex 
 static void prv_chat_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
   GRect bounds = layer_get_bounds(cell_layer);
   GTextAlignment alignment = GTextAlignmentLeft;
+  bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
   GColor text_color = GColorBlack;
   int16_t y = 4;
 
@@ -572,8 +573,11 @@ static void prv_chat_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex 
   }
 
   alignment = s_messages[cell_index->row].outgoing ? GTextAlignmentRight : GTextAlignmentLeft;
+  if (highlighted) {
+    text_color = GColorWhite;
+  }
 #if defined(PBL_COLOR)
-  if (s_messages[cell_index->row].outgoing) {
+  else if (s_messages[cell_index->row].outgoing) {
     text_color = GColorPictonBlue;
   }
 #endif

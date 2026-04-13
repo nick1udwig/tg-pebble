@@ -18,8 +18,19 @@ function createPkjsApp(options) {
   var fixtureMode = options.fixtureMode !== false;
   var cache = createCacheStore(storage);
   var syncState = SyncState.desynced;
+  var existingSession = cache.getSession();
+  var incomingSessionString = options.initialSession && options.initialSession.sessionString
+    ? String(options.initialSession.sessionString)
+    : "";
+  var existingSessionString = existingSession && existingSession.sessionString
+    ? String(existingSession.sessionString)
+    : "";
 
-  if (options.initialSession && !cache.getSession()) {
+  if (incomingSessionString && existingSessionString !== incomingSessionString) {
+    cache.clearAuthState();
+    cache.setSession(options.initialSession);
+    cache.clearChatsAndMessages();
+  } else if (options.initialSession && !existingSession) {
     cache.setSession(options.initialSession);
   }
 
