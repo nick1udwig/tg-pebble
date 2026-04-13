@@ -38,4 +38,8 @@ echo "Keep this process running while you use the emulator."
 echo "Use 'pebble kill' from another shell to stop it if needed."
 echo
 
+./scripts/build-telegram-runtime.sh >/dev/null
+TG_PEBBLE_FIXTURE_MODE=1 npm run build:pkjs-legacy >/dev/null
+pebble build >/dev/null
+
 exec "${headless_flags[@]}" pebble install --emulator "${platform}" --vnc --logs --qemu_logs

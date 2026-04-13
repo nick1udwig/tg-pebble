@@ -79,7 +79,7 @@ describe("watch/pkjs protocol fixtures", () => {
     expect(serializeSendResult({ ok: false, detail: "Fixture transport rejected the message." })).toBe(
       "error|Fixture transport rejected the message.",
     );
-    expect(serializeSettingsState({ sendMode: "preview", previewChatMessage: false })).toBe("preview|0");
-    expect(serializeSettingsState({ sendMode: "auto", previewChatMessage: true })).toBe("auto|1");
+    expect(serializeSettingsState({ sendMode: "preview", previewChatMessage: false })).toBe("preview|0|0|0");
+    expect(serializeSettingsState({ sendMode: "auto", previewChatMessage: true, hasSession: true, hasAuthError: true })).toBe("auto|1|1|1");
   });
 });

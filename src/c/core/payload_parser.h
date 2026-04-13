@@ -32,6 +32,8 @@ typedef struct {
 typedef struct {
   bool is_auto_send;
   bool preview_chat_message;
+  bool has_session;
+  bool has_auth_error;
 } TgParsedSettingsState;
 
 bool tg_parse_chat_item_payload(const char *payload, TgParsedChatItem *out);

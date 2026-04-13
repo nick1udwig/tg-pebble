@@ -20,6 +20,8 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 2
 fi
 
+pebble_python="${TG_PEBBLE_TOOL_PYTHON:-$(head -n 1 "$(command -v pebble)" | sed 's/^#!//')}"
+
 session_file="build/tests/emulator-session.json"
 persist_dir="build/tests/emulator-persist"
 chat_list_ppm="tests/emulator/artifacts/chat-list.ppm"
@@ -49,6 +51,8 @@ rm -rf "${persist_dir}"
 rm -f "${transcribe_log}" "${chat_list_ppm}" "${chat_open_ppm}" "${dictation_listening_ppm}" \
   "${dictation_preview_ppm}" "${dictation_sent_ppm}" "${chat_list_png}" "${chat_open_png}" \
   "${dictation_listening_png}" "${dictation_preview_png}" "${dictation_sent_png}"
+./scripts/build-telegram-runtime.sh >/dev/null
+TG_PEBBLE_FIXTURE_MODE=1 npm run build:pkjs-legacy >/dev/null
 pebble build >/dev/null
 bash scripts/start-qemu-pkjs-session.sh basalt build/tg-pebble.pbw "${session_file}" "${persist_dir}" >/dev/null
 
@@ -90,7 +94,7 @@ python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${dict
 kill "${transcribe_pid}" >/dev/null 2>&1 || true
 transcribe_pid=""
 
-/root/.local/share/uv/tools/pebble-tool/bin/python - <<PY
+"${pebble_python}" - <<PY
 from PIL import Image
 Image.open("${chat_list_ppm}").convert("RGBA").save("${chat_list_png}")
 Image.open("${chat_open_ppm}").convert("RGBA").save("${chat_open_png}")

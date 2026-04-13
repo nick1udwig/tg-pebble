@@ -32,10 +32,10 @@ def build(ctx):
         binaries=binaries,
         js=ctx.path.ant_glob(
             [
-                "src/pkjs/**/*.js",
-                "src/pkjs/**/*.json",
+                "src/pkjs_legacy/**/*.js",
+                "src/pkjs_legacy/**/*.json",
                 "src/common/**/*.js",
             ]
         ),
-        js_entry_file="src/pkjs/index.js",
+        js_entry_file="src/pkjs_legacy/index.js",
     )

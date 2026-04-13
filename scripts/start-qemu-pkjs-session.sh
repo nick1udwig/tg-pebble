@@ -16,18 +16,19 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 2
 fi
 
-sdk_root="/root/.pebble-sdk/SDKs/current"
+pebble_bin="$(command -v pebble)"
+sdk_root="${TG_PEBBLE_SDK_ROOT:-${HOME}/.pebble-sdk/SDKs/current}"
 sdk_version="$(basename "$(readlink -f "${sdk_root}")")"
 sdk_core_dir="${sdk_root}/sdk-core"
 toolchain_dir="${sdk_root}/toolchain"
-persist_dir="${persist_dir_override:-/root/.pebble-sdk/${sdk_version}/${platform}}"
+persist_dir="${persist_dir_override:-${HOME}/.pebble-sdk/${sdk_version}/${platform}}"
 spi_flash="${persist_dir}/qemu_spi_flash.bin"
 micro_flash="${sdk_core_dir}/pebble/${platform}/qemu/qemu_micro_flash.bin"
 spi_flash_bz2="${sdk_core_dir}/pebble/${platform}/qemu/qemu_spi_flash.bin.bz2"
 layout_file="${sdk_core_dir}/pebble/${platform}/qemu/layouts.json"
 qemu_bin="${toolchain_dir}/bin/qemu-pebble"
 pc_bios_dir="${toolchain_dir}/lib/pc-bios"
-pkjs_python="/root/.local/share/uv/tools/pebble-tool/bin/python"
+pkjs_python="${TG_PEBBLE_TOOL_PYTHON:-$(head -n 1 "${pebble_bin}" | sed 's/^#!//')}"
 qemu_log="${session_file%.json}.qemu.log"
 pkjs_log="${session_file%.json}.pkjs.log"
 

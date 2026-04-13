@@ -1,9 +1,8 @@
-var telegram = require("telegram");
-var sessions = require("telegram/sessions");
+var runtime = require("./runtime");
 
-var Api = telegram.Api;
-var TelegramClient = telegram.TelegramClient;
-var StringSession = sessions.StringSession;
+var Api = runtime.Api;
+var TelegramClient = runtime.TelegramClient;
+var StringSession = runtime.StringSession;
 
 var REQUIRED_ENV_KEYS = Object.freeze([
   "TG_API_ID",

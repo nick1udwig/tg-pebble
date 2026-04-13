@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
+import { createRequire } from "node:module";
 import readline from "node:readline";
 
-import { TelegramClient } from "telegram";
-import { StringSession } from "telegram/sessions/index.js";
+const require = createRequire(import.meta.url);
+const { TelegramClient, StringSession } = require("../src/pkjs/lib/telegram/runtime.js");
 
 function ask(question) {
   const rl = readline.createInterface({

@@ -28,6 +28,14 @@ function parseBoolean(value, fallback) {
   return value === true || value === "1" || value === "true" || value === "yes" || value === "on";
 }
 
+function getErrorMessage(error, fallback) {
+  if (error && error.message) {
+    return String(error.message);
+  }
+
+  return String(fallback || "Unknown error.");
+}
+
 function loadTelegramEnvConfig() {
   var source = typeof process !== "undefined" && process && process.env ? process.env : {};
   var apiId = Number.parseInt(String(source.TG_API_ID || ""), 10);
@@ -59,11 +67,24 @@ function createTelegramClientFactory(config) {
   };
 }
 
+function buildSettingsStatePayload() {
+  var settingsState = app.getSettingsState();
+  var configState = app.getConfigState();
+
+  return {
+    sendMode: settingsState.sendMode,
+    previewChatMessage: settingsState.previewChatMessage === true,
+    hasSession: configState.hasSession === true,
+    hasAuthError: !!configState.authError
+  };
+}
+
 var telegramEnvConfig = loadTelegramEnvConfig();
 var telegramClientFactory = createTelegramClientFactory(telegramEnvConfig);
 
 var app = createPkjsApp({
   storage: typeof localStorage !== "undefined" ? localStorage : null,
+  fixtureMode: false,
   initialSession: telegramEnvConfig && telegramEnvConfig.sessionString ? { sessionString: telegramEnvConfig.sessionString } : null,
   telegramAdapterFactory: telegramEnvConfig ? function(session) {
     return createTelegramAdapter({
@@ -111,7 +132,7 @@ function sendEnvelope(type, payloadString, requestId, syncState, onSuccess, onEr
 function sendSettingsState(syncState) {
   sendEnvelope(
     MessageType.settingsState,
-    serializeSettingsState(app.getSettingsState()),
+    serializeSettingsState(buildSettingsStatePayload()),
     0,
     syncState || app.getSyncState()
   );
@@ -172,7 +193,7 @@ function sendMessageItems(messages, index, onComplete, onError) {
 async function sendChatList() {
   var payload = await app.bootstrap();
   var chats = payload.chats || [];
-  var settingsState = app.getSettingsState();
+  var settingsState = buildSettingsStatePayload();
 
   sendEnvelope(MessageType.syncStatus, "", 0, SyncState.syncing, function() {
     sendEnvelope(MessageType.settingsState, serializeSettingsState(settingsState), 0, SyncState.syncing, function() {
@@ -232,20 +253,24 @@ async function handleConfigSave(state) {
 
   if (nextState.phoneNumber && nextState.loginCode) {
     if (!telegramEnvConfig || typeof telegramClientFactory !== "function") {
+      app.setAuthError("Telegram auth is not configured in this build.");
       app.refreshFailed();
       sendSettingsState(SyncState.desynced);
       return;
     }
 
+    app.clearAuthError();
     app.refreshStarted();
     sendEnvelope(MessageType.syncStatus, "", 0, SyncState.syncing);
 
     try {
       app.setSession(await authorizeTelegramSession(telegramEnvConfig, nextState, telegramClientFactory));
+      app.clearAuthError();
       app.clearCache();
       await sendChatList();
     } catch (error) {
       log("Telegram config auth failed", error);
+      app.setAuthError(getErrorMessage(error, "Telegram sign-in failed."));
       app.refreshFailed();
       sendSettingsState(SyncState.desynced);
       sendEnvelope(MessageType.syncStatus, "", 0, SyncState.desynced);
@@ -267,10 +292,11 @@ async function handleLogoutAction() {
     }
   }
 
+  app.clearAuthError();
   app.logout();
   sendEnvelope(
     MessageType.settingsState,
-    serializeSettingsState({ sendMode: "preview", previewChatMessage: false }),
+    serializeSettingsState({ sendMode: "preview", previewChatMessage: false, hasSession: false, hasAuthError: false }),
     0,
     SyncState.desynced,
     function() {

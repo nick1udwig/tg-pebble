@@ -88,10 +88,14 @@ static void test_parse_send_result_payload(void) {
   ASSERT_TRUE(tg_parse_settings_state_payload("auto|1", &settings));
   ASSERT_TRUE(settings.is_auto_send);
   ASSERT_TRUE(settings.preview_chat_message);
+  ASSERT_TRUE(!settings.has_session);
+  ASSERT_TRUE(!settings.has_auth_error);
 
-  ASSERT_TRUE(tg_parse_settings_state_payload("preview|0", &settings));
+  ASSERT_TRUE(tg_parse_settings_state_payload("preview|0|1|1", &settings));
   ASSERT_TRUE(!settings.is_auto_send);
   ASSERT_TRUE(!settings.preview_chat_message);
+  ASSERT_TRUE(settings.has_session);
+  ASSERT_TRUE(settings.has_auth_error);
 }
 
 int main(void) {

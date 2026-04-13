@@ -8,7 +8,21 @@ const DEFAULT_STATE = Object.freeze({
   previewChatMessage: false,
   hasSession: false,
   accountLabel: "",
+  authError: "",
 });
+
+function sanitizePersistedState(state) {
+  const source = state ?? {};
+
+  return {
+    phoneNumber: String(source.phoneNumber ?? "").trim(),
+    sendMode: source.sendMode === "auto" ? "auto" : "preview",
+    previewChatMessage: source.previewChatMessage === true,
+    hasSession: source.hasSession === true,
+    accountLabel: String(source.accountLabel ?? "").trim(),
+    authError: String(source.authError ?? "").trim(),
+  };
+}
 
 function readEmbeddedState() {
   try {
@@ -23,8 +37,8 @@ function readEmbeddedState() {
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    const stored = raw ? JSON.parse(raw) : {};
-    const embedded = readEmbeddedState();
+    const stored = sanitizePersistedState(raw ? JSON.parse(raw) : {});
+    const embedded = sanitizePersistedState(readEmbeddedState());
 
     return {
       ...DEFAULT_STATE,
@@ -39,7 +53,7 @@ function loadState() {
 }
 
 function saveState(state) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizePersistedState(state)));
 }
 
 function getBridge() {
@@ -103,6 +117,18 @@ function writeFormState(state) {
   setSessionState(state);
 }
 
+function setInitialStatus(state) {
+  if (state.authError) {
+    setStatus(`Last sign-in failed: ${state.authError}`, "error");
+    return;
+  }
+
+  setStatus(
+    state.hasSession ? "Current PKJS session loaded." : "Save changes to update settings or sign in.",
+    state.hasSession ? "success" : "info",
+  );
+}
+
 function reveal(buttonId) {
   document.querySelector(buttonId).classList.remove("hidden");
 }
@@ -112,27 +138,29 @@ function hide(buttonId) {
 }
 
 function bootstrap() {
-  const state = loadState();
-  writeFormState(state);
-  setStatus(state.hasSession ? "Current PKJS session loaded." : "Save changes to update settings or sign in.");
+  let currentState = loadState();
+  saveState(currentState);
+  writeFormState(currentState);
+  setInitialStatus(currentState);
 
   document.querySelectorAll('input[name="send-mode"]').forEach((node) => {
     node.addEventListener("change", () => {
-      const nextState = readFormState();
-      saveState(nextState);
-      setStatus(`Send mode saved locally: ${nextState.sendMode}`, "success");
+      currentState = { ...currentState, ...readFormState() };
+      saveState(currentState);
+      setStatus(`Send mode saved locally: ${currentState.sendMode}`, "success");
     });
   });
 
   document.querySelector("#preview-chat-message").addEventListener("change", () => {
-    const nextState = readFormState();
-    saveState(nextState);
-    setStatus(`Chat previews ${nextState.previewChatMessage ? "enabled" : "disabled"} locally.`, "success");
+    currentState = { ...currentState, ...readFormState() };
+    saveState(currentState);
+    setStatus(`Chat previews ${currentState.previewChatMessage ? "enabled" : "disabled"} locally.`, "success");
   });
 
   document.querySelector("#save-login").addEventListener("click", () => {
     const nextState = readFormState();
-    saveState(nextState);
+    currentState = { ...currentState, ...nextState, authError: "" };
+    saveState(currentState);
     getBridge().submit({ action: "config:save", state: nextState });
     setStatus(
       nextState.phoneNumber && nextState.loginCode

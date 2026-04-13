@@ -4,12 +4,17 @@ var CACHE_KEYS = Object.freeze({
   chatList: "chat_list",
   messagePages: "message_pages",
   chatRefs: "chat_refs",
-  syncCheckpoint: "sync_checkpoint"
+  syncCheckpoint: "sync_checkpoint",
+  authState: "auth_state"
 });
 
 var DEFAULT_SETTINGS = Object.freeze({
   sendMode: "preview",
   previewChatMessage: false
+});
+
+var DEFAULT_AUTH_STATE = Object.freeze({
+  errorMessage: ""
 });
 
 function createMemoryStorage() {
@@ -47,6 +52,12 @@ function mergeSettings(settings) {
   }
 
   return merged;
+}
+
+function normalizeAuthState(authState) {
+  return {
+    errorMessage: String(authState && authState.errorMessage ? authState.errorMessage : "")
+  };
 }
 
 function createCacheStore(storage, options) {
@@ -101,6 +112,15 @@ function createCacheStore(storage, options) {
     setSession: function(session) {
       return setJson(CACHE_KEYS.session, session);
     },
+    getAuthState: function() {
+      return normalizeAuthState(getJson(CACHE_KEYS.authState, DEFAULT_AUTH_STATE));
+    },
+    setAuthState: function(authState) {
+      return setJson(CACHE_KEYS.authState, normalizeAuthState(authState));
+    },
+    clearAuthState: function() {
+      remove(CACHE_KEYS.authState);
+    },
     getSettings: function() {
       return mergeSettings(getJson(CACHE_KEYS.settings, {}));
     },
@@ -133,6 +153,7 @@ function createCacheStore(storage, options) {
     },
     clearAll: function() {
       remove(CACHE_KEYS.session);
+      remove(CACHE_KEYS.authState);
       remove(CACHE_KEYS.settings);
       remove(CACHE_KEYS.chatList);
       remove(CACHE_KEYS.messagePages);

@@ -103,7 +103,12 @@ function serializeSendResult(result) {
 }
 
 function serializeSettingsState(settings) {
-  return [sanitizeField(settings.sendMode), settings.previewChatMessage ? "1" : "0"].join("|");
+  return [
+    sanitizeField(settings.sendMode),
+    settings.previewChatMessage ? "1" : "0",
+    settings.hasSession ? "1" : "0",
+    settings.hasAuthError ? "1" : "0"
+  ].join("|");
 }
 
 module.exports = {

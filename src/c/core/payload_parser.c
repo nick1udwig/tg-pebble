@@ -142,6 +142,8 @@ bool tg_parse_settings_state_payload(const char *payload, TgParsedSettingsState 
   const char *cursor = payload;
   char send_mode_buffer[16];
   char preview_buffer[4];
+  char session_buffer[4];
+  char auth_error_buffer[4];
 
   if (!payload || !out) {
     return false;
@@ -161,9 +163,24 @@ bool tg_parse_settings_state_payload(const char *payload, TgParsedSettingsState 
 
   if (!prv_next_field(&cursor, preview_buffer, sizeof(preview_buffer))) {
     out->preview_chat_message = false;
+    out->has_session = false;
+    out->has_auth_error = false;
     return true;
   }
 
   out->preview_chat_message = prv_parse_bool_field(preview_buffer);
+  if (!prv_next_field(&cursor, session_buffer, sizeof(session_buffer))) {
+    out->has_session = false;
+    out->has_auth_error = false;
+    return true;
+  }
+
+  out->has_session = prv_parse_bool_field(session_buffer);
+  if (!prv_next_field(&cursor, auth_error_buffer, sizeof(auth_error_buffer))) {
+    out->has_auth_error = false;
+    return true;
+  }
+
+  out->has_auth_error = prv_parse_bool_field(auth_error_buffer);
   return true;
 }

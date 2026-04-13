@@ -1,8 +1,8 @@
-var telegram = require("telegram");
+var runtime = require("./runtime");
 var messageGroups = require("../message_groups");
 var placeholders = require("../placeholders");
 
-var Api = telegram.Api;
+var Api = runtime.Api;
 var addSenderRunMetadata = messageGroups.addSenderRunMetadata;
 var toDisplayText = placeholders.toDisplayText;
 

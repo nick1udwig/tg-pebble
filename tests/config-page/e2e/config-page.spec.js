@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test.beforeEach(async ({ page }) => {
+async function installBridge(page) {
   await page.addInitScript(() => {
     window.__submitted = [];
     window.PebbleConfigBridge = {
@@ -9,6 +9,10 @@ test.beforeEach(async ({ page }) => {
       },
     };
   });
+}
+
+test.beforeEach(async ({ page }) => {
+  await installBridge(page);
 });
 
 test("loads embedded state and submits config changes in one payload", async ({ page }) => {
@@ -47,6 +51,17 @@ test("loads embedded state and submits config changes in one payload", async ({ 
       previewChatMessage: false,
     },
   });
+
+  const stored = await page.evaluate(() => JSON.parse(window.localStorage.getItem("tg_pebble:config_state")));
+  expect(stored).toMatchObject({
+    phoneNumber: "+15551234567",
+    sendMode: "preview",
+    previewChatMessage: false,
+    hasSession: true,
+    accountLabel: "Test User",
+  });
+  expect(stored.loginCode).toBeUndefined();
+  expect(stored.password).toBeUndefined();
 });
 
 test("requires confirmation before clear cache and logout", async ({ page }) => {
@@ -63,4 +78,34 @@ test("requires confirmation before clear cache and logout", async ({ page }) => 
   const submitted = await page.evaluate(() => window.__submitted);
   expect(submitted).toContainEqual({ action: "cache:clear" });
   expect(submitted).toContainEqual({ action: "auth:logout" });
+});
+
+test("scrubs sensitive auth fields from bootstrap state and renders auth errors", async ({ page }) => {
+  const initialState = encodeURIComponent(JSON.stringify({
+    phoneNumber: "+15550002222",
+    loginCode: "99999",
+    password: "hunter2",
+    sendMode: "auto",
+    previewChatMessage: true,
+    authError: "Code expired.",
+  }));
+
+  await page.goto(`/?state=${initialState}`);
+
+  await expect(page.locator("#phone-number")).toHaveValue("+15550002222");
+  await expect(page.locator("#login-code")).toHaveValue("");
+  await expect(page.locator("#password")).toHaveValue("");
+  await expect(page.locator("#send-mode-auto")).toBeChecked();
+  await expect(page.locator("#preview-chat-message")).toBeChecked();
+  await expect(page.locator("#status-banner")).toHaveText("Last sign-in failed: Code expired.");
+
+  const stored = await page.evaluate(() => JSON.parse(window.localStorage.getItem("tg_pebble:config_state")));
+  expect(stored).toMatchObject({
+    phoneNumber: "+15550002222",
+    sendMode: "auto",
+    previewChatMessage: true,
+    authError: "Code expired.",
+  });
+  expect(stored.loginCode).toBeUndefined();
+  expect(stored.password).toBeUndefined();
 });

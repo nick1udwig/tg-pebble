@@ -30,6 +30,14 @@ describe("createPkjsApp", () => {
     });
   });
 
+  it("does not seed fixtures when fixture mode is disabled", async () => {
+    const app = createPkjsApp({ storage: createMemoryStorage(), fixtureMode: false });
+    const payload = await app.bootstrap();
+
+    expect(payload.chats).toEqual([]);
+    expect(app.getSession()).toBe(null);
+  });
+
   it("persists send mode updates in the cache", () => {
     const app = createPkjsApp({ storage: createMemoryStorage() });
 
@@ -54,6 +62,23 @@ describe("createPkjsApp", () => {
       previewChatMessage: true,
       hasSession: true,
       accountLabel: "Alice Example",
+      authError: "",
+    });
+  });
+
+  it("persists auth errors in config state until a live session is stored", () => {
+    const app = createPkjsApp({ storage: createMemoryStorage() });
+
+    app.setAuthError("Code expired.");
+    expect(app.getConfigState()).toMatchObject({
+      hasSession: false,
+      authError: "Code expired.",
+    });
+
+    app.setSession({ sessionString: "saved-session", phoneNumber: "+15551234567" });
+    expect(app.getConfigState()).toMatchObject({
+      hasSession: true,
+      authError: "",
     });
   });
 

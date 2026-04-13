@@ -41,6 +41,9 @@
     "test:c": "bash scripts/test-c.sh",
     "test:config": "bash scripts/test-config.sh",
     "test:telegram": "bash scripts/test-telegram.sh",
+    "build:telegram-runtime": "bash scripts/build-telegram-runtime.sh",
+    "build:pkjs-legacy": "node scripts/build-pkjs-legacy.mjs",
+    "build:watch": "npm run build:telegram-runtime && npm run build:pkjs-legacy && pebble build",
     "telegram:session": "node scripts/create-telegram-session.mjs",
     "test:emulator": "bash scripts/test-emulator.sh",
     "run:emulator": "bash scripts/run-emulator.sh",
@@ -51,13 +54,9 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.53.0",
+    "esbuild": "^0.25.11",
     "pixelmatch": "^7.1.0",
     "pngjs": "^7.0.0",
     "vitest": "^3.2.4"
-  },
-  "dependencies": {
-    "debug": "2.6.9",
-    "ms": "2.0.0",
-    "telegram": "^2.26.22"
   }
 }

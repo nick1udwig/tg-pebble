@@ -90,6 +90,8 @@ static bool s_waiting_for_send_result = false;
 static bool s_send_mode_auto = false;
 static bool s_preview_chat_message = false;
 static bool s_has_received_inbox = false;
+static bool s_has_session = false;
+static bool s_has_auth_error = false;
 static TgSyncStatus s_sync_status = TG_SYNC_STATUS_SYNCING;
 static AppTimer *s_sync_status_timer = NULL;
 static size_t s_sync_status_frame = 0;
@@ -99,6 +101,36 @@ static void prv_update_preview_contents(void);
 static void prv_request_chat_list(void);
 static void prv_request_chat_page(int32_t chat_id);
 static void prv_schedule_bootstrap(uint32_t delay_ms);
+static void prv_copy_string(char *dest, size_t dest_size, const char *src);
+
+static void prv_chat_list_zero_state(char *title, size_t title_size, char *subtitle, size_t subtitle_size) {
+  if (!s_has_received_inbox || s_sync_status == TG_SYNC_STATUS_SYNCING) {
+    prv_copy_string(title, title_size, "Loading chats");
+    prv_copy_string(subtitle, subtitle_size, "Waiting for phone sync");
+    return;
+  }
+
+  if (!s_has_session && s_has_auth_error) {
+    prv_copy_string(title, title_size, "Sign-in failed");
+    prv_copy_string(subtitle, subtitle_size, "Retry in phone config");
+    return;
+  }
+
+  if (!s_has_session) {
+    prv_copy_string(title, title_size, "Sign in required");
+    prv_copy_string(subtitle, subtitle_size, "Open phone config");
+    return;
+  }
+
+  if (s_sync_status == TG_SYNC_STATUS_DESYNCED) {
+    prv_copy_string(title, title_size, "Sync issue");
+    prv_copy_string(subtitle, subtitle_size, "Check phone connection");
+    return;
+  }
+
+  prv_copy_string(title, title_size, "No chats yet");
+  prv_copy_string(subtitle, subtitle_size, "Nothing to show");
+}
 
 static bool prv_parse_count_string(const char *value, size_t max_value, size_t *out) {
   size_t parsed = 0;
@@ -443,11 +475,14 @@ static void prv_chat_list_draw_row(GContext *ctx, const Layer *cell_layer, MenuI
   bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
   GColor text_color = highlighted ? GColorWhite : GColorBlack;
   char unread_text[8];
+  char title_text[TG_CHAT_TITLE_LENGTH];
+  char subtitle_text[TG_STATUS_TEXT_LENGTH];
 
   (void)context;
 
   if (s_chat_count == 0) {
-    menu_cell_basic_draw(ctx, cell_layer, "Loading chats", "Waiting for PKJS fixture data", NULL);
+    prv_chat_list_zero_state(title_text, sizeof(title_text), subtitle_text, sizeof(subtitle_text));
+    menu_cell_basic_draw(ctx, cell_layer, title_text, subtitle_text, NULL);
     return;
   }
 
@@ -882,6 +917,8 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
     if (tg_parse_settings_state_payload(payload, &parsed)) {
       s_send_mode_auto = parsed.is_auto_send;
       s_preview_chat_message = parsed.preview_chat_message;
+      s_has_session = parsed.has_session;
+      s_has_auth_error = parsed.has_auth_error;
       if (s_settings_menu_layer) {
         menu_layer_reload_data(s_settings_menu_layer);
       }
@@ -983,6 +1020,8 @@ static void prv_init(void) {
   app_message_register_outbox_sent(prv_outbox_sent);
   app_message_open(512, 512);
   s_has_received_inbox = false;
+  s_has_session = false;
+  s_has_auth_error = false;
 
   s_chat_list_window = window_create();
   window_set_window_handlers(s_chat_list_window, (WindowHandlers){

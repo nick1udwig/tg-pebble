@@ -374,10 +374,26 @@ That command kills tracked process groups, removes stale lock metadata, and clea
 Run:
 
 ```bash
-pebble build
+npm run build:watch
 ```
 
 This should build the app for the configured rectangular platforms and emit a `.pbw` bundle into `build/`.
+
+That command:
+
+- refreshes the Telegram runtime bundle through the sibling builder project when available
+- refreshes the generated legacy PKJS tree
+- invokes `pebble build`
+
+The default sibling builder path is:
+
+- `../tg-pebble-telegram-builder`
+
+Override it with:
+
+- `TG_PEBBLE_TELEGRAM_BUILDER_DIR=/abs/path/to/builder`
+
+If the sibling builder is absent but `src/pkjs/lib/telegram/runtime_bundle.js` already exists, the script reuses the checked-in artifact.
 
 ### 4.6 Run The Automated Emulator Smoke Test
 
@@ -391,7 +407,8 @@ This script is self-guarding. If another Pebble emulator session is already runn
 
 This now performs a real smoke pass:
 
-- builds the app
+- refreshes the Telegram runtime bundle
+- rebuilds the legacy PKJS tree in fixture mode and builds the app
 - starts a manual `qemu-pebble` session under `xvfb-run`
 - starts a long-lived `pypkjs` sidecar against that QEMU instance
 - uses an isolated per-run persist directory so PKJS settings and watch state do not leak across test runs
@@ -944,7 +961,8 @@ npm run test:js
 npm run test:c
 npm run test:config
 npm test
-pebble build
+npm run build:telegram-runtime
+npm run build:watch
 ```
 
 ### Emulator Commands
@@ -968,7 +986,8 @@ As of this runbook:
 
 - `pebble-tool` installation is working
 - SDK `4.9.148` installation is working
-- `pebble build` is working
+- sibling Telegram builder integration is working
+- `npm run build:watch` is working
 - `npm run test:js` is working
 - `npm run test:c` is working
 - `npm run test:config` is working
