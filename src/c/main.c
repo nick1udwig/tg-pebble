@@ -452,16 +452,42 @@ static void prv_push_chat_window_for_selected_row(uint16_t row) {
   prv_request_chat_page(s_active_chat_id);
 }
 
+static uint16_t prv_chat_list_get_num_sections(struct MenuLayer *menu_layer, void *context) {
+  (void)menu_layer;
+  (void)context;
+  return 2;
+}
+
 static uint16_t prv_chat_list_get_num_rows(struct MenuLayer *menu_layer, uint16_t section_index, void *context) {
+  (void)menu_layer;
+  (void)context;
+
+  if (section_index == 0) {
+    return s_chat_count == 0 ? 1 : (uint16_t)s_chat_count;
+  }
+
+  return 1;
+}
+
+static int16_t prv_chat_list_get_header_height(struct MenuLayer *menu_layer, uint16_t section_index, void *context) {
   (void)menu_layer;
   (void)section_index;
   (void)context;
-  return s_chat_count == 0 ? 1 : (uint16_t)s_chat_count;
+  return MENU_CELL_BASIC_HEADER_HEIGHT;
+}
+
+static void prv_chat_list_draw_header(GContext *ctx, const Layer *cell_layer, uint16_t section_index, void *context) {
+  (void)context;
+  menu_cell_basic_header_draw(ctx, cell_layer, section_index == 0 ? "Chats" : "Menu");
 }
 
 static int16_t prv_chat_list_get_cell_height(struct MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
   (void)menu_layer;
   (void)context;
+
+  if (cell_index->section == 1) {
+    return 28;
+  }
 
   if (s_chat_count == 0) {
     return 40;
@@ -479,6 +505,11 @@ static void prv_chat_list_draw_row(GContext *ctx, const Layer *cell_layer, MenuI
   char subtitle_text[TG_STATUS_TEXT_LENGTH];
 
   (void)context;
+
+  if (cell_index->section == 1) {
+    menu_cell_basic_draw(ctx, cell_layer, "Settings", "Send mode, cache, logout", NULL);
+    return;
+  }
 
   if (s_chat_count == 0) {
     prv_chat_list_zero_state(title_text, sizeof(title_text), subtitle_text, sizeof(subtitle_text));
@@ -512,18 +543,17 @@ static void prv_chat_list_draw_row(GContext *ctx, const Layer *cell_layer, MenuI
 static void prv_chat_list_select_click(struct MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
   (void)menu_layer;
   (void)context;
+
+  if (cell_index->section == 1) {
+    window_stack_push(s_settings_window, true);
+    return;
+  }
+
   if (s_chat_count == 0) {
     return;
   }
 
   prv_push_chat_window_for_selected_row((uint16_t)cell_index->row);
-}
-
-static void prv_chat_list_select_long_click(struct MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
-  (void)menu_layer;
-  (void)cell_index;
-  (void)context;
-  window_stack_push(s_settings_window, true);
 }
 
 static uint16_t prv_chat_get_num_rows(struct MenuLayer *menu_layer, uint16_t section_index, void *context) {
@@ -727,16 +757,18 @@ static void prv_chat_list_window_load(Window *window) {
       prv_create_sync_layer(root_layer, GRect(4, bounds.size.h - TG_FOOTER_HEIGHT - 1, 14, TG_FOOTER_HEIGHT));
   s_chat_list_settings_layer = prv_create_label_layer(
       root_layer, GRect(20, bounds.size.h - TG_FOOTER_HEIGHT, bounds.size.w - 24, TG_FOOTER_HEIGHT),
-      "Hold Sel: settings", FONT_KEY_GOTHIC_14, GTextAlignmentRight);
+      "Settings at end", FONT_KEY_GOTHIC_14, GTextAlignmentRight);
 
   s_chat_list_menu_layer = menu_layer_create(menu_frame);
   menu_layer_set_callbacks(s_chat_list_menu_layer, NULL,
                            (MenuLayerCallbacks){
+                               .get_num_sections = prv_chat_list_get_num_sections,
                                .get_num_rows = prv_chat_list_get_num_rows,
+                               .get_header_height = prv_chat_list_get_header_height,
+                               .draw_header = prv_chat_list_draw_header,
                                .get_cell_height = prv_chat_list_get_cell_height,
                                .draw_row = prv_chat_list_draw_row,
                                .select_click = prv_chat_list_select_click,
-                               .select_long_click = prv_chat_list_select_long_click,
                            });
   layer_add_child(root_layer, menu_layer_get_layer(s_chat_list_menu_layer));
   menu_layer_set_click_config_onto_window(s_chat_list_menu_layer, window);
