@@ -7,6 +7,7 @@ fi
 
 platform="${1:-basalt}"
 fixture_mode="${TG_PEBBLE_FIXTURE_MODE:-1}"
+vnc_mode="${TG_PEBBLE_EMULATOR_VNC:-1}"
 
 if ! command -v pebble >/dev/null 2>&1; then
   echo "pebble-tool is not installed or not on PATH." >&2
@@ -24,12 +25,18 @@ fi
 
 headless_flags=()
 if [[ -z "${DISPLAY:-}" ]]; then
-  if command -v xvfb-run >/dev/null 2>&1; then
-    echo "No DISPLAY detected. Starting the emulator under xvfb-run with VNC enabled."
-    headless_flags=(xvfb-run -a)
+  if [[ "${vnc_mode}" == "1" || "${vnc_mode}" == "true" ]]; then
+    if command -v xvfb-run >/dev/null 2>&1; then
+      echo "No DISPLAY detected. Starting the emulator under xvfb-run with VNC enabled."
+      headless_flags=(xvfb-run -a)
+    else
+      echo "No DISPLAY detected and xvfb-run is unavailable." >&2
+      echo "Install xvfb or run this script from a desktop session." >&2
+      exit 2
+    fi
   else
-    echo "No DISPLAY detected and xvfb-run is unavailable." >&2
-    echo "Install xvfb or run this script from a desktop session." >&2
+    echo "Window mode requires a desktop DISPLAY." >&2
+    echo "Use VNC mode instead, or run this script from a desktop session." >&2
     exit 2
   fi
 fi
@@ -40,6 +47,11 @@ if [[ "${fixture_mode}" == "1" || "${fixture_mode}" == "true" ]]; then
 else
   echo "PKJS mode: live"
 fi
+if [[ "${vnc_mode}" == "1" || "${vnc_mode}" == "true" ]]; then
+  echo "Display mode: VNC"
+else
+  echo "Display mode: window"
+fi
 echo "Keep this process running while you use the emulator."
 echo "Use 'pebble kill' from another shell to stop it if needed."
 echo
@@ -48,4 +60,12 @@ echo
 TG_PEBBLE_FIXTURE_MODE="${fixture_mode}" npm run build:pkjs-legacy >/dev/null
 pebble build >/dev/null
 
-exec "${headless_flags[@]}" pebble install --emulator "${platform}" --vnc --logs --qemu_logs
+emulator_args=(
+  pebble install --emulator "${platform}" --logs --qemu_logs
+)
+
+if [[ "${vnc_mode}" == "1" || "${vnc_mode}" == "true" ]]; then
+  emulator_args+=(--vnc)
+fi
+
+exec "${headless_flags[@]}" "${emulator_args[@]}"

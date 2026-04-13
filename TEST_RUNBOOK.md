@@ -437,13 +437,13 @@ Artifacts are written to:
 Preferred command:
 
 ```bash
-npm run run:emulator -- basalt
+npm run run:emulator:window -- basalt
 ```
 
 If you have a working X11 desktop session:
 
 ```bash
-npm run run:emulator -- basalt
+npm run run:emulator:window -- basalt
 ```
 
 #### Headless / SSH Session
@@ -471,6 +471,15 @@ TG_SESSION_STRING=...
 npm run run:emulator:live -- basalt
 ```
 
+To run that same live session in a native emulator window instead of VNC:
+
+```bash
+TG_API_ID=...
+TG_API_HASH=...
+TG_SESSION_STRING=...
+npm run run:emulator:live:window -- basalt
+```
+
 You can create `TG_SESSION_STRING` with:
 
 ```bash
@@ -482,6 +491,7 @@ npm run telegram:session
 Notes:
 
 - `run:emulator:live` sets `TG_PEBBLE_FIXTURE_MODE=0`, so PKJS does not seed fixture chats.
+- `run:emulator:window` and `run:emulator:live:window` set `TG_PEBBLE_EMULATOR_VNC=0`, so the emulator opens a local window instead of binding VNC.
 - the live emulator path is best paired with a saved session string; that avoids repeated login-code churn inside emulator testing.
 - `npm run test:emulator` remains fixture-backed on purpose.
 

@@ -48,6 +48,8 @@
     "test:emulator": "bash scripts/test-emulator.sh",
     "run:emulator": "bash scripts/run-emulator.sh",
     "run:emulator:live": "TG_PEBBLE_FIXTURE_MODE=0 bash scripts/run-emulator.sh",
+    "run:emulator:window": "TG_PEBBLE_EMULATOR_VNC=0 bash scripts/run-emulator.sh",
+    "run:emulator:live:window": "TG_PEBBLE_EMULATOR_VNC=0 TG_PEBBLE_FIXTURE_MODE=0 bash scripts/run-emulator.sh",
     "cleanup:sessions": "bash scripts/cleanup-dev-sessions.sh",
     "dev:config": "node scripts/serve-config-page.mjs --port 4173",
     "capture:baselines": "bash scripts/capture-baselines.sh",
