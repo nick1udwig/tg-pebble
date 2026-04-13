@@ -492,6 +492,7 @@ Notes:
 
 - `run:emulator:live` sets `TG_PEBBLE_FIXTURE_MODE=0`, so PKJS does not seed fixture chats.
 - `run:emulator:window` and `run:emulator:live:window` set `TG_PEBBLE_EMULATOR_VNC=0`, so the emulator opens a local window instead of binding VNC.
+- live emulator launch now clears this app's persisted emulator local storage by default, so stale fixture data does not bleed into a real-session run.
 - the live emulator path is best paired with a saved session string; that avoids repeated login-code churn inside emulator testing.
 - `npm run test:emulator` remains fixture-backed on purpose.
 

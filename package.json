@@ -46,6 +46,7 @@
     "build:watch": "npm run build:telegram-runtime && npm run build:pkjs-legacy && pebble build",
     "telegram:session": "node scripts/create-telegram-session.mjs",
     "test:emulator": "bash scripts/test-emulator.sh",
+    "reset:emulator:app-storage": "bash scripts/reset-emulator-app-storage.sh",
     "run:emulator": "bash scripts/run-emulator.sh",
     "run:emulator:live": "TG_PEBBLE_FIXTURE_MODE=0 bash scripts/run-emulator.sh",
     "run:emulator:window": "TG_PEBBLE_EMULATOR_VNC=0 bash scripts/run-emulator.sh",

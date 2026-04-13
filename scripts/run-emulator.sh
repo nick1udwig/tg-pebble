@@ -8,6 +8,7 @@ fi
 platform="${1:-basalt}"
 fixture_mode="${TG_PEBBLE_FIXTURE_MODE:-1}"
 vnc_mode="${TG_PEBBLE_EMULATOR_VNC:-1}"
+reset_app_storage="${TG_PEBBLE_EMULATOR_RESET_APP_STORAGE:-}"
 
 if ! command -v pebble >/dev/null 2>&1; then
   echo "pebble-tool is not installed or not on PATH." >&2
@@ -55,6 +56,18 @@ fi
 echo "Keep this process running while you use the emulator."
 echo "Use 'pebble kill' from another shell to stop it if needed."
 echo
+
+if [[ -z "${reset_app_storage}" ]]; then
+  if [[ "${fixture_mode}" == "1" || "${fixture_mode}" == "true" ]]; then
+    reset_app_storage=0
+  else
+    reset_app_storage=1
+  fi
+fi
+
+if [[ "${reset_app_storage}" == "1" || "${reset_app_storage}" == "true" ]]; then
+  ./scripts/reset-emulator-app-storage.sh "${platform}" >/dev/null
+fi
 
 ./scripts/build-telegram-runtime.sh >/dev/null
 TG_PEBBLE_FIXTURE_MODE="${fixture_mode}" npm run build:pkjs-legacy >/dev/null
