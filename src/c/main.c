@@ -507,7 +507,7 @@ static void prv_chat_list_draw_row(GContext *ctx, const Layer *cell_layer, MenuI
   (void)context;
 
   if (cell_index->section == 1) {
-    menu_cell_basic_draw(ctx, cell_layer, "Settings", "Send mode, cache, logout", NULL);
+    menu_cell_basic_draw(ctx, cell_layer, "Settings", NULL, NULL);
     return;
   }
 
@@ -1021,6 +1021,10 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
   if (strcmp(type, TG_MSG_CHAT_PAGE_COMPLETE) == 0) {
     if (s_chat_menu_layer) {
       menu_layer_reload_data(s_chat_menu_layer);
+      if (s_message_count > 0) {
+        menu_layer_set_selected_index(s_chat_menu_layer, MenuIndex(0, (int)(s_message_count - 1)),
+                                      MenuRowAlignBottom, false);
+      }
     }
     return;
   }
