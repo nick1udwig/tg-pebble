@@ -273,6 +273,9 @@ function createTelegramAdapter(options) {
     client = clientFactory(sessionString);
 
     try {
+      if (client && typeof client.connect === "function") {
+        await client.connect();
+      }
       return await handler(client);
     } finally {
       if (client && typeof client.disconnect === "function") {
@@ -288,7 +291,9 @@ function createTelegramAdapter(options) {
     hydrateChatList: async function(params) {
       params = params || {};
       return withClient(async function(client) {
-        var dialogs = await client.getDialogs({ limit: params.limit || 20 });
+        var dialogs;
+
+        dialogs = await client.getDialogs({ limit: params.limit || 20 });
         return mapDialogs(dialogs, params.cachedRefs || {}, { limit: params.limit || 20 });
       });
     },

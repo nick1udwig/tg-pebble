@@ -9,6 +9,7 @@ platform="${1:-basalt}"
 fixture_mode="${TG_PEBBLE_FIXTURE_MODE:-1}"
 vnc_mode="${TG_PEBBLE_EMULATOR_VNC:-1}"
 reset_app_storage="${TG_PEBBLE_EMULATOR_RESET_APP_STORAGE:-}"
+phone_logs="${TG_PEBBLE_EMULATOR_PHONE_LOGS:-0}"
 
 if ! command -v pebble >/dev/null 2>&1; then
   echo "pebble-tool is not installed or not on PATH." >&2
@@ -105,8 +106,12 @@ PY
 pebble build >/dev/null
 
 emulator_args=(
-  pebble install --emulator "${platform}" --logs --qemu_logs
+  pebble install --emulator "${platform}" --qemu_logs
 )
+
+if [[ "${phone_logs}" == "1" || "${phone_logs}" == "true" ]]; then
+  emulator_args+=(--logs)
+fi
 
 if [[ "${vnc_mode}" == "1" || "${vnc_mode}" == "true" ]]; then
   emulator_args+=(--vnc)

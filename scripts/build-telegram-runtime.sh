@@ -3,6 +3,11 @@ set -euo pipefail
 
 builder_dir="${TG_PEBBLE_TELEGRAM_BUILDER_DIR:-../tg-pebble-telegram-builder}"
 output_path="${TG_PEBBLE_RUNTIME_OUT:-src/pkjs/lib/telegram/runtime_bundle.js}"
+force_rebuild="${TG_PEBBLE_REBUILD_TELEGRAM_RUNTIME:-0}"
+
+if [[ "${force_rebuild}" != "1" && "${force_rebuild}" != "true" && -f "${output_path}" ]]; then
+  exit 0
+fi
 
 if [[ ! -d "${builder_dir}" ]]; then
   if [[ -f "${output_path}" ]]; then

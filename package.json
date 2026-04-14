@@ -54,7 +54,8 @@
     "cleanup:sessions": "bash scripts/cleanup-dev-sessions.sh",
     "dev:config": "node scripts/serve-config-page.mjs --port 4173",
     "capture:baselines": "bash scripts/capture-baselines.sh",
-    "review:visual": "bash scripts/review-visual-diffs.sh"
+    "review:visual": "bash scripts/review-visual-diffs.sh",
+    "build:telegram-runtime:force": "TG_PEBBLE_REBUILD_TELEGRAM_RUNTIME=1 bash scripts/build-telegram-runtime.sh"
   },
   "devDependencies": {
     "@playwright/test": "^1.53.0",

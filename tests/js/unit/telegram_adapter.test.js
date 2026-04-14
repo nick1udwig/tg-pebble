@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
+  createTelegramAdapter,
   mapDialogs,
   mapMessages,
 } from "../../../src/pkjs/lib/telegram/adapter.js";
@@ -60,5 +61,29 @@ describe("telegram adapter mapping", () => {
       text: "Follow-up",
       showSender: false,
     });
+  });
+
+  it("connects the Telegram client before hydrating dialogs", async () => {
+    const client = {
+      connect: vi.fn(async () => {}),
+      disconnect: vi.fn(async () => {}),
+      getDialogs: vi.fn(async () => []),
+    };
+    const adapter = createTelegramAdapter({
+      enabled: true,
+      sessionString: "saved-session",
+      clientFactory() {
+        return client;
+      },
+    });
+
+    await expect(adapter.hydrateChatList({ limit: 5, cachedRefs: {} })).resolves.toEqual({
+      chats: [],
+      chatRefs: {},
+    });
+
+    expect(client.connect).toHaveBeenCalledTimes(1);
+    expect(client.getDialogs).toHaveBeenCalledTimes(1);
+    expect(client.disconnect).toHaveBeenCalledTimes(1);
   });
 });

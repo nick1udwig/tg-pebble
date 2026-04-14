@@ -4,18 +4,34 @@ var Api = runtime.Api;
 var TelegramClient = runtime.TelegramClient;
 var StringSession = runtime.StringSession;
 
+function buildTelegramClientParams(runtimeConfig) {
+  return {
+    connectionRetries: runtimeConfig.connectionRetries == null ? 3 : runtimeConfig.connectionRetries,
+    requestRetries: runtimeConfig.requestRetries == null ? 3 : runtimeConfig.requestRetries,
+    reconnectRetries: runtimeConfig.reconnectRetries == null ? 0 : runtimeConfig.reconnectRetries,
+    // The bundled PKJS runtime can complete plain WebSocket MTProto today.
+    // WSS still fails in this environment, so only allow it when explicitly forced.
+    useWSS: runtimeConfig.forceWSS === true,
+    testServers: runtimeConfig.testServers === true,
+    deviceModel: String(runtimeConfig.deviceModel || "TG Pebble"),
+    systemVersion: String(runtimeConfig.systemVersion || "Pebble PKJS"),
+    appVersion: String(runtimeConfig.appVersion || "0.1"),
+    langCode: String(runtimeConfig.langCode || "en"),
+    systemLangCode: String(runtimeConfig.systemLangCode || "en")
+  };
+}
+
 function createTelegramClient(runtimeConfig, sessionString) {
   if (!runtimeConfig || !Number.isFinite(runtimeConfig.apiId) || !runtimeConfig.apiHash) {
     throw new Error("Telegram runtime config is incomplete.");
   }
 
-  return new TelegramClient(new StringSession(String(sessionString || "")), runtimeConfig.apiId, runtimeConfig.apiHash, {
-    connectionRetries: runtimeConfig.connectionRetries == null ? 3 : runtimeConfig.connectionRetries,
-    requestRetries: runtimeConfig.requestRetries == null ? 3 : runtimeConfig.requestRetries,
-    reconnectRetries: runtimeConfig.reconnectRetries == null ? 0 : runtimeConfig.reconnectRetries,
-    useWSS: runtimeConfig.useWSS !== false,
-    testServers: runtimeConfig.testServers === true
-  });
+  return new TelegramClient(
+    new StringSession(String(sessionString || "")),
+    runtimeConfig.apiId,
+    runtimeConfig.apiHash,
+    buildTelegramClientParams(runtimeConfig)
+  );
 }
 
 function formatAccountLabel(me) {
@@ -110,6 +126,7 @@ async function revokeTelegramSession(runtimeConfig, sessionString, clientFactory
 
 module.exports = {
   authorizeTelegramSession: authorizeTelegramSession,
+  buildTelegramClientParams: buildTelegramClientParams,
   createTelegramClient: createTelegramClient,
   formatAccountLabel: formatAccountLabel,
   revokeTelegramSession: revokeTelegramSession

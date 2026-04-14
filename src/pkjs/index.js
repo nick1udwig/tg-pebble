@@ -23,6 +23,65 @@ var createTelegramClient = telegramAuthLib.createTelegramClient;
 var revokeTelegramSession = telegramAuthLib.revokeTelegramSession;
 var compiledFixtureMode = (typeof __TG_PEBBLE_FIXTURE_MODE__ === "string" ? __TG_PEBBLE_FIXTURE_MODE__ : "false") === "true";
 
+function formatLogExtra(extra) {
+  var summary = {};
+  var names;
+  var index;
+  var name;
+
+  if (extra == null) {
+    return "";
+  }
+
+  if (typeof extra === "string") {
+    return extra;
+  }
+
+  if (typeof extra !== "object") {
+    return String(extra);
+  }
+
+  names = Object.getOwnPropertyNames(extra);
+  for (index = 0; index < names.length; index += 1) {
+    name = names[index];
+    if (summary[name] === undefined) {
+      try {
+        summary[name] = String(extra[name]);
+      } catch (_error) {
+      }
+    }
+  }
+
+  if (summary.name === undefined && extra.name != null) {
+    summary.name = String(extra.name);
+  }
+
+  if (summary.message === undefined && extra.message != null) {
+    summary.message = String(extra.message);
+  }
+
+  if (summary.stack === undefined && extra.stack != null) {
+    summary.stack = String(extra.stack);
+  }
+
+  if (summary.stackTrace === undefined && extra.stackTrace != null) {
+    summary.stackTrace = String(extra.stackTrace);
+  }
+
+  if (summary.stringValue === undefined) {
+    try {
+      summary.stringValue = String(extra);
+    } catch (_error) {
+    }
+  }
+
+  try {
+    return JSON.stringify(summary);
+  } catch (_error) {
+    return String(extra);
+  }
+}
+
 function getErrorMessage(error, fallback) {
   if (error && error.message) {
     return String(error.message);
@@ -61,6 +120,9 @@ var telegramClientFactory = createTelegramClientFactory(telegramRuntimeConfig);
 var app = createPkjsApp({
   storage: pkjsStorage,
   fixtureMode: compiledFixtureMode,
+  logger: function(message, extra) {
+    log(message, extra);
+  },
   initialSession: telegramRuntimeConfig && telegramRuntimeConfig.sessionString
     ? { sessionString: telegramRuntimeConfig.sessionString }
     : null,
@@ -74,7 +136,14 @@ var app = createPkjsApp({
 });
 
 function log(message, extra) {
-  console.log("[PKJS] " + message, extra || {});
+  var detail = formatLogExtra(extra);
+
+  if (detail) {
+    console.log("[PKJS] " + message + " " + detail);
+    return;
+  }
+
+  console.log("[PKJS] " + message);
 }
 
 function readPayloadValue(payload, numericKey, namedKey) {

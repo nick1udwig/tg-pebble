@@ -16,6 +16,7 @@ function createPkjsApp(options) {
   var transport = options.transport || null;
   var telegramAdapterFactory = options.telegramAdapterFactory || null;
   var fixtureMode = options.fixtureMode !== false;
+  var logger = typeof options.logger === "function" ? options.logger : function() {};
   var cache = createCacheStore(storage);
   var syncState = SyncState.desynced;
   var existingSession = cache.getSession();
@@ -243,7 +244,8 @@ function createPkjsApp(options) {
         });
         cache.setChatList(result.chats || []);
         cache.setChatRefs(result.chatRefs || {});
-      } catch (_error) {
+      } catch (error) {
+        logger("hydrateChatList failed", error);
       }
 
       return buildCurrentChatListPayload();
@@ -264,7 +266,8 @@ function createPkjsApp(options) {
             limit: 20
           });
           updateMessagePage(chatId, mergeOptimisticTail(cachedMessages, result.messages || []));
-        } catch (_error) {
+        } catch (error) {
+          logger("hydrateChatPage failed", error);
         }
       }
 
@@ -370,6 +373,7 @@ function createPkjsApp(options) {
           appendOutgoingMessageToCache(chatId, nextText);
           return { ok: true };
         } catch (error) {
+          logger("sendTextMessage failed", error);
           return {
             ok: false,
             detail: error && error.message ? error.message : "Telegram send failed."

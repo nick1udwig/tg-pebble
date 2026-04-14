@@ -505,6 +505,8 @@ Notes:
 - the live emulator path is best paired with a saved session string; that avoids repeated login-code churn inside emulator testing.
 - the first live launch after a storage reset requires `TG_API_ID` and `TG_API_HASH`; after that, you can preserve the seeded runtime config by setting `TG_PEBBLE_EMULATOR_RESET_APP_STORAGE=0`.
 - `npm run test:emulator` remains fixture-backed on purpose.
+- emulator wrapper commands now skip Pebble phone logs by default because current `pebble-tool` log translation crashes on JS sourcemaps; set `TG_PEBBLE_EMULATOR_PHONE_LOGS=1` if you explicitly want `--logs`.
+- `npm run build:telegram-runtime` uses the checked-in runtime bundle by default; use `npm run build:telegram-runtime:force` when you intentionally want to rebuild it from the sibling builder project.
 
 ```bash
 bash scripts/start-qemu-pkjs-session.sh basalt build/tg-pebble.pbw build/tests/emulator-session.json
@@ -1010,6 +1012,7 @@ npm run test:c
 npm run test:config
 npm test
 npm run build:telegram-runtime
+npm run build:telegram-runtime:force
 npm run build:watch
 ```
 

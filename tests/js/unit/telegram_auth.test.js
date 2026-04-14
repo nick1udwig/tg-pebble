@@ -2,11 +2,41 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   authorizeTelegramSession,
+  buildTelegramClientParams,
   formatAccountLabel,
   revokeTelegramSession,
 } from "../../../src/pkjs/lib/telegram/auth.js";
 
 describe("telegram auth helpers", () => {
+  it("builds stable Telegram client params without relying on host os metadata", () => {
+    expect(buildTelegramClientParams({
+      apiId: 123456,
+      apiHash: "hash",
+      useWSS: true,
+      testServers: false,
+    })).toEqual({
+      connectionRetries: 3,
+      requestRetries: 3,
+      reconnectRetries: 0,
+      useWSS: false,
+      testServers: false,
+      deviceModel: "TG Pebble",
+      systemVersion: "Pebble PKJS",
+      appVersion: "0.1",
+      langCode: "en",
+      systemLangCode: "en",
+    });
+  });
+
+  it("allows WSS only when explicitly forced", () => {
+    expect(buildTelegramClientParams({
+      apiId: 123456,
+      apiHash: "hash",
+      forceWSS: true,
+      testServers: false,
+    }).useWSS).toBe(true);
+  });
+
   it("formats account labels from names and usernames", () => {
     expect(formatAccountLabel({ firstName: "Alice", lastName: "Example" })).toBe("Alice Example");
     expect(formatAccountLabel({ username: "bot_name" })).toBe("@bot_name");
