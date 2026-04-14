@@ -71,7 +71,7 @@ if [[ -z "${reset_app_storage}" ]]; then
 fi
 
 if [[ "${reset_app_storage}" == "1" || "${reset_app_storage}" == "true" ]]; then
-  ./scripts/reset-emulator-app-storage.sh "${platform}" >/dev/null
+  bash ./scripts/reset-emulator-app-storage.sh "${platform}" >/dev/null
 fi
 
 if [[ "${fixture_mode}" != "1" && "${fixture_mode}" != "true" ]]; then
@@ -80,6 +80,19 @@ fi
 
 ./scripts/build-telegram-runtime.sh >/dev/null
 TG_PEBBLE_FIXTURE_MODE="${fixture_mode}" npm run build:pkjs-legacy >/dev/null
+
+if [[ "${fixture_mode}" == "1" || "${fixture_mode}" == "true" ]]; then
+  if ! rg -q 'fixtureMode:\\s*true,' src/pkjs_legacy/index.js; then
+    echo "Expected fixture PKJS build, but generated legacy bundle is not in fixture mode." >&2
+    exit 2
+  fi
+else
+  if ! rg -q 'fixtureMode:\\s*false,' src/pkjs_legacy/index.js; then
+    echo "Expected live PKJS build, but generated legacy bundle is still in fixture mode." >&2
+    exit 2
+  fi
+fi
+
 pebble build >/dev/null
 
 emulator_args=(
