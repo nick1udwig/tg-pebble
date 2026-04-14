@@ -81,17 +81,26 @@ fi
 ./scripts/build-telegram-runtime.sh >/dev/null
 TG_PEBBLE_FIXTURE_MODE="${fixture_mode}" npm run build:pkjs-legacy >/dev/null
 
+expected_fixture_mode="false"
 if [[ "${fixture_mode}" == "1" || "${fixture_mode}" == "true" ]]; then
-  if ! rg -q 'fixtureMode:\\s*true,' src/pkjs_legacy/index.js; then
-    echo "Expected fixture PKJS build, but generated legacy bundle is not in fixture mode." >&2
-    exit 2
-  fi
-else
-  if ! rg -q 'fixtureMode:\\s*false,' src/pkjs_legacy/index.js; then
-    echo "Expected live PKJS build, but generated legacy bundle is still in fixture mode." >&2
-    exit 2
-  fi
+  expected_fixture_mode="true"
 fi
+
+python3 - "${expected_fixture_mode}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+expected = sys.argv[1]
+text = Path("src/pkjs_legacy/index.js").read_text(encoding="utf-8")
+match = re.search(r'compiledFixtureMode = \(true \? "(true|false)" : "false"\) === "true";', text)
+if not match or match.group(1) != expected:
+    if expected == "true":
+        print("Expected fixture PKJS build, but generated legacy bundle is not in fixture mode.", file=sys.stderr)
+    else:
+        print("Expected live PKJS build, but generated legacy bundle is still in fixture mode.", file=sys.stderr)
+    raise SystemExit(2)
+PY
 
 pebble build >/dev/null
 

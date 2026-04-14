@@ -21,6 +21,7 @@ var createTelegramAdapter = telegramAdapterLib.createTelegramAdapter;
 var authorizeTelegramSession = telegramAuthLib.authorizeTelegramSession;
 var createTelegramClient = telegramAuthLib.createTelegramClient;
 var revokeTelegramSession = telegramAuthLib.revokeTelegramSession;
+var compiledFixtureMode = (typeof __TG_PEBBLE_FIXTURE_MODE__ === "string" ? __TG_PEBBLE_FIXTURE_MODE__ : "false") === "true";
 
 function getErrorMessage(error, fallback) {
   if (error && error.message) {
@@ -59,7 +60,7 @@ var telegramClientFactory = createTelegramClientFactory(telegramRuntimeConfig);
 
 var app = createPkjsApp({
   storage: pkjsStorage,
-  fixtureMode: false,
+  fixtureMode: compiledFixtureMode,
   initialSession: telegramRuntimeConfig && telegramRuntimeConfig.sessionString
     ? { sessionString: telegramRuntimeConfig.sessionString }
     : null,

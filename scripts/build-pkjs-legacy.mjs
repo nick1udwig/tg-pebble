@@ -1,4 +1,4 @@
-import { readdir, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readdir, mkdir, readFile, rm } from "node:fs/promises";
 
 import { build } from "esbuild";
 
@@ -35,15 +35,13 @@ await build({
   outdir: "src/pkjs_legacy",
   platform: "node",
   target: "es2015",
+  define: {
+    __TG_PEBBLE_FIXTURE_MODE__: JSON.stringify(fixtureMode ? "true" : "false"),
+  },
 });
 
 const generatedIndex = await readFile("src/pkjs_legacy/index.js", "utf8");
-const fixtureMarker = "fixtureMode: false,";
-if (generatedIndex.indexOf(fixtureMarker) < 0) {
-  throw new Error(`Expected fixture marker '${fixtureMarker}' in generated legacy index.`);
+const compiledFixtureMatch = generatedIndex.match(/compiledFixtureMode = \(true \? "(true|false)" : "false"\) === "true";/);
+if (!compiledFixtureMatch || compiledFixtureMatch[1] !== (fixtureMode ? "true" : "false")) {
+  throw new Error(`Expected compiled fixture mode '${fixtureMode ? "true" : "false"}' in generated legacy index.`);
 }
-await writeFile(
-  "src/pkjs_legacy/index.js",
-  generatedIndex.replace(fixtureMarker, `fixtureMode: ${fixtureMode ? "true" : "false"},`),
-  "utf8"
-);
