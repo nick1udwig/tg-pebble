@@ -210,6 +210,17 @@ fi
 from pathlib import Path
 from PIL import Image
 
+PLATFORM_SIZES = {
+    "aplite": (144, 168),
+    "basalt": (144, 168),
+    "diorite": (144, 168),
+    "flint": (144, 168),
+    "emery": (200, 228),
+}
+
+platform = "${platform}"
+target_size = PLATFORM_SIZES.get(platform)
+
 pairs = [
     (Path("${chat_list_ppm}"), Path("${chat_list_png}")),
     (Path("${chat_open_ppm}"), Path("${chat_open_png}")),
@@ -221,8 +232,22 @@ pairs = [
 ]
 
 for source, target in pairs:
-    if source.exists():
-        Image.open(source).convert("RGBA").save(target)
+    if not source.exists():
+        continue
+
+    image = Image.open(source).convert("RGBA")
+    if target_size is not None and image.size != target_size:
+        target_width, target_height = target_size
+        width, height = image.size
+        if width < target_width or height < target_height:
+            raise SystemExit(
+                f"Capture for {platform} is smaller than expected: {width}x{height} < {target_width}x{target_height}"
+            )
+        left = (width - target_width) // 2
+        top = (height - target_height) // 2
+        image = image.crop((left, top, left + target_width, top + target_height))
+
+    image.save(target)
 PY
 
 test -s "${chat_list_png}"
