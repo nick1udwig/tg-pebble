@@ -2,6 +2,45 @@
 
 #include <string.h>
 
+static size_t prv_utf8_prefix_length(const char *start, size_t length) {
+  size_t offset = 0;
+  size_t codepoint_length = 0;
+  size_t continuation_index = 0;
+  unsigned char current;
+
+  while (offset < length) {
+    current = (unsigned char)start[offset];
+    if ((current & 0x80U) == 0x00U) {
+      offset += 1;
+      continue;
+    }
+
+    if ((current & 0xE0U) == 0xC0U) {
+      codepoint_length = 2;
+    } else if ((current & 0xF0U) == 0xE0U) {
+      codepoint_length = 3;
+    } else if ((current & 0xF8U) == 0xF0U) {
+      codepoint_length = 4;
+    } else {
+      break;
+    }
+
+    if (offset + codepoint_length > length) {
+      break;
+    }
+
+    for (continuation_index = 1; continuation_index < codepoint_length; continuation_index += 1) {
+      if ((((unsigned char)start[offset + continuation_index]) & 0xC0U) != 0x80U) {
+        return offset;
+      }
+    }
+
+    offset += codepoint_length;
+  }
+
+  return offset;
+}
+
 static void prv_copy_field(char *dest, size_t dest_size, const char *start, size_t length) {
   size_t copy_length = length;
 
@@ -12,6 +51,8 @@ static void prv_copy_field(char *dest, size_t dest_size, const char *start, size
   if (copy_length >= dest_size) {
     copy_length = dest_size - 1;
   }
+
+  copy_length = prv_utf8_prefix_length(start, copy_length);
 
   if (copy_length > 0) {
     memcpy(dest, start, copy_length);
