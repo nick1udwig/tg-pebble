@@ -11,3 +11,4 @@ tests/emulator/artifacts/*
 .env.telegram.test.local
 .env.telegram.test
 src/pkjs_legacy/
+*.swp

@@ -1,0 +1,89 @@
+name: Public Build
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      TG_PEBBLE_APP_API_ID: ${{ secrets.TG_PEBBLE_APP_API_ID }}
+      TG_PEBBLE_APP_API_HASH: ${{ secrets.TG_PEBBLE_APP_API_HASH }}
+      TG_PEBBLE_APP_API_HASH_PRESENT: ${{ secrets.TG_PEBBLE_APP_API_HASH != '' }}
+      TG_PEBBLE_APP_CONFIG_URL: ${{ secrets.TG_PEBBLE_APP_CONFIG_URL }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install Ubuntu dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libsdl1.2debian \
+            libfdt1 \
+            python3.12-venv
+
+      - name: Validate publish secrets
+        run: |
+          if [ -z "$TG_PEBBLE_APP_API_ID" ] || [ "$TG_PEBBLE_APP_API_HASH_PRESENT" != "true" ]; then
+            echo "::error::Missing TG_PEBBLE_APP_API_ID or TG_PEBBLE_APP_API_HASH GitHub Actions secret."
+            exit 1
+          fi
+
+          if [ -z "$TG_PEBBLE_APP_CONFIG_URL" ]; then
+            echo "TG_PEBBLE_APP_CONFIG_URL=https://nick1udwig.github.io/tg-pebble/config/" >> "$GITHUB_ENV"
+          fi
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install pebble-tool
+        run: |
+          uv tool install pebble-tool --python 3.12
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install Pebble SDK
+        run: pebble sdk install latest
+
+      - name: Build static config page
+        run: npm run build:config:docs
+
+      - name: Build public watch package
+        run: npm run build:watch
+
+      - name: Upload public build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tg-public-build-${{ github.sha }}
+          path: |
+            build/tg-pebble.pbw
+            build/appinfo.json
+            docs/config
+          if-no-files-found: error
+          retention-days: 14

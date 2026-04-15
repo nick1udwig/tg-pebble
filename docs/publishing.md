@@ -60,10 +60,7 @@ Add these repository secrets in GitHub under `Settings -> Secrets and variables 
 
 - `TG_PEBBLE_APP_API_ID`
 - `TG_PEBBLE_APP_API_HASH`
-
-If you want Pages deployments or release builds to use a different hosted config URL, add:
-
-- `TG_PEBBLE_APP_CONFIG_URL`
+- optional: `TG_PEBBLE_APP_CONFIG_URL`
 
 Recommended values:
 
@@ -71,18 +68,24 @@ Recommended values:
 - `TG_PEBBLE_APP_API_HASH`: your Telegram application API hash
 - `TG_PEBBLE_APP_CONFIG_URL`: `https://nick1udwig.github.io/tg-pebble/config/`
 
-Use GitHub Actions secrets for CI/release builds. Do not commit the real values into the repo.
+The `Public Build` workflow consumes these secrets to build the release `.pbw`. Do not commit the real values into the repo.
+
+## GitHub Actions Workflows
+
+This repo now uses CI for both public build output and Pages deployment:
+
+- `.github/workflows/public-build.yml`: builds the public `.pbw` on push to `master` and on manual dispatch, using the Telegram app secrets above
+- `.github/workflows/pages.yml`: builds `docs/config/` and deploys the full `docs/` tree to GitHub Pages on push to `master` and on manual dispatch
 
 ## GitHub Pages Setup
 
-To host the config page from this repo:
+To use the Actions-based Pages deployment:
 
-1. Run `npm run build:config:docs` locally.
-2. Commit the generated `docs/config/` files.
-3. In GitHub, open `Settings -> Pages`.
-4. Set `Build and deployment` to `Deploy from a branch`.
-5. Select branch `master` and folder `/docs`.
-6. Save and wait for GitHub Pages to publish.
-7. Verify `https://nick1udwig.github.io/tg-pebble/config/` loads the config page.
+1. Push `master` with the new workflow files.
+2. In GitHub, open `Settings -> Pages`.
+3. Set `Build and deployment` to `GitHub Actions`.
+4. Save if GitHub prompts for confirmation.
+5. Let the `Deploy Pages` workflow run.
+6. Verify `https://nick1udwig.github.io/tg-pebble/config/` loads the config page.
 
-If you later automate this with a Pages workflow, the published URL should stay the same.
+After that, new pushes to `master` will redeploy the config page automatically.
