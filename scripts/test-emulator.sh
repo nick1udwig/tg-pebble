@@ -72,6 +72,14 @@ print(session["qemu_port"])
 PY
 )"
 
+app_uuid="$(python3 - <<PY
+import json
+from pathlib import Path
+app_info = json.loads(Path("appinfo.json").read_text(encoding="utf-8"))
+print(app_info["uuid"])
+PY
+)"
+
 sleep 2
 python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${chat_list_ppm}" >/dev/null
 python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" sendkey x s >/dev/null
@@ -111,6 +119,45 @@ test -s "${dictation_sent_png}"
 grep -q "VoiceControlCommand(command=1" "${transcribe_log}"
 grep -q "Sending dictation result" "${transcribe_log}"
 grep -q "AppMessage(command=1, transaction_id=" "${transcribe_log}"
+
+python3 - <<PY
+import dbm.dumb
+import json
+import re
+from pathlib import Path
+
+store = dbm.dumb.open(str(Path("${persist_dir}") / "localstorage" / "${app_uuid}"), "r")
+try:
+    decoder = json.JSONDecoder()
+    chat_text = store[b"tg_pebble:chat_list"].decode("utf-8")
+    chats, _ = decoder.raw_decode(chat_text)
+    message_pages_text = store[b"tg_pebble:message_pages"].decode("utf-8")
+finally:
+    store.close()
+
+chat = next((entry for entry in chats if entry.get("id") == 2001), None)
+if not chat:
+    raise SystemExit("Missing fixture chat 2001 after emulator smoke test.")
+if chat.get("preview") != "Hello Pebble":
+    raise SystemExit(f"Expected updated preview 'Hello Pebble', got {chat.get('preview')!r}")
+
+if '"2001":[' not in message_pages_text:
+    raise SystemExit("Missing fixture message page 2001 after dictation send.")
+
+message_match = re.search(
+    r'"2001":\[(?P<messages>.*?)\],"3001":\[',
+    message_pages_text,
+    re.DOTALL,
+)
+if not message_match:
+    raise SystemExit("Could not isolate fixture message page 2001 from emulator storage.")
+
+messages_blob = message_match.group("messages")
+if '"text":"Hello Pebble"' not in messages_blob or '"outgoing":true' not in messages_blob:
+    raise SystemExit(
+        "Expected outgoing 'Hello Pebble' message in fixture message page 2001 after dictation send."
+    )
+PY
 
 echo "Emulator smoke test passed."
 echo "Artifacts:"
