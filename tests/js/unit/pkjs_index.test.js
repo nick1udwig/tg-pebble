@@ -42,6 +42,9 @@ async function flushAsyncWork() {
 
 async function loadPkjsHarness(options = {}) {
   const env = options.env || {};
+  const embeddedConfig = Object.prototype.hasOwnProperty.call(options, "embeddedConfig")
+    ? options.embeddedConfig
+    : null;
   const authorizeResult = options.authorizeResult || {
     sessionString: "saved-session",
     phoneNumber: "+15551234567",
@@ -54,6 +57,7 @@ async function loadPkjsHarness(options = {}) {
   const storage = createMemoryStorage();
   const previousPebble = globalThis.Pebble;
   const previousLocalStorage = globalThis.localStorage;
+  const previousEmbeddedConfig = globalThis.__TG_PEBBLE_BUILTIN_RUNTIME_CONFIG__;
   const envBackup = {};
   const envKeys = [
     "TG_API_ID",
@@ -134,6 +138,12 @@ async function loadPkjsHarness(options = {}) {
     }
   }
 
+  if (embeddedConfig == null) {
+    delete globalThis.__TG_PEBBLE_BUILTIN_RUNTIME_CONFIG__;
+  } else {
+    globalThis.__TG_PEBBLE_BUILTIN_RUNTIME_CONFIG__ = embeddedConfig;
+  }
+
   globalThis.localStorage = storage;
   globalThis.Pebble = {
     addEventListener(event, listener) {
@@ -173,6 +183,12 @@ async function loadPkjsHarness(options = {}) {
         }
       }
 
+      if (previousEmbeddedConfig === undefined) {
+        delete globalThis.__TG_PEBBLE_BUILTIN_RUNTIME_CONFIG__;
+      } else {
+        globalThis.__TG_PEBBLE_BUILTIN_RUNTIME_CONFIG__ = previousEmbeddedConfig;
+      }
+
       if (previousPebble === undefined) {
         delete globalThis.Pebble;
       } else {
@@ -209,7 +225,7 @@ describe("PKJS config auth flow", () => {
       await flushAsyncWork();
 
       expect(harness.authorizeTelegramSession).toHaveBeenCalledWith(
-        expect.objectContaining({ apiId: 123456, apiHash: "env-hash" }),
+        expect.objectContaining({ apiId: 123456, apiHash: "env-hash", source: "env" }),
         expect.objectContaining({
           phoneNumber: "+15551234567",
           loginCode: "12345",
@@ -247,6 +263,51 @@ describe("PKJS config auth flow", () => {
           syncState: "syncing",
         },
       ]);
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("uses embedded runtime config when env is unavailable", async () => {
+    const harness = await loadPkjsHarness({
+      env: {
+        TG_API_ID: null,
+        TG_API_HASH: null,
+        TG_TEST_USE_WSS: null,
+        TG_TEST_SERVERS: null,
+        TG_CONFIG_URL: null,
+        TG_SESSION_STRING: null,
+      },
+      embeddedConfig: {
+        apiId: 888001,
+        apiHash: "embedded-hash",
+        configUrl: "https://nick1udwig.github.io/tg-pebble/config/",
+      },
+    });
+
+    try {
+      const response = encodeConfigResponse("config:save", {
+        phoneNumber: "+15551234567",
+        loginCode: "12345",
+        password: "secret",
+        sendMode: "preview",
+        previewChatMessage: false,
+      });
+
+      harness.listeners.get("webviewclosed")({ response });
+      await flushAsyncWork();
+
+      expect(harness.authorizeTelegramSession).toHaveBeenCalledWith(
+        expect.objectContaining({ apiId: 888001, apiHash: "embedded-hash", source: "embedded" }),
+        expect.objectContaining({ phoneNumber: "+15551234567", loginCode: "12345" }),
+        expect.any(Function),
+      );
+      expect(JSON.parse(harness.storage.getItem("tg_pebble:session"))).toEqual({
+        sessionString: "saved-session",
+        phoneNumber: "+15551234567",
+        accountLabel: "Alice Example",
+        userId: "7",
+      });
     } finally {
       harness.restore();
     }
@@ -325,7 +386,7 @@ describe("PKJS config auth flow", () => {
     }
   });
 
-  it("surfaces configuration errors when Telegram auth env is unavailable", async () => {
+  it("opens the embedded config page URL for published builds", async () => {
     const harness = await loadPkjsHarness({
       env: {
         TG_API_ID: null,
@@ -335,6 +396,35 @@ describe("PKJS config auth flow", () => {
         TG_CONFIG_URL: null,
         TG_SESSION_STRING: null,
       },
+      embeddedConfig: {
+        apiId: 888001,
+        apiHash: "embedded-hash",
+        configUrl: "https://nick1udwig.github.io/tg-pebble/config/",
+      },
+    });
+
+    try {
+      harness.listeners.get("showConfiguration")();
+
+      expect(globalThis.Pebble.openURL).toHaveBeenCalledTimes(1);
+      expect(globalThis.Pebble.openURL.mock.calls[0][0]).toContain("https://nick1udwig.github.io/tg-pebble/config/");
+      expect(globalThis.Pebble.openURL.mock.calls[0][0]).toContain("state=");
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("surfaces configuration errors when no Telegram auth config is available", async () => {
+    const harness = await loadPkjsHarness({
+      env: {
+        TG_API_ID: null,
+        TG_API_HASH: null,
+        TG_TEST_USE_WSS: null,
+        TG_TEST_SERVERS: null,
+        TG_CONFIG_URL: null,
+        TG_SESSION_STRING: null,
+      },
+      embeddedConfig: null,
     });
 
     try {

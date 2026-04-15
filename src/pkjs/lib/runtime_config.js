@@ -1,4 +1,5 @@
 var RUNTIME_CONFIG_STORAGE_KEY = "tg_pebble:runtime_config";
+var DEFAULT_CONFIG_URL = "http://127.0.0.1:4173";
 
 function parseBoolean(value, fallback) {
   if (value === undefined || value === null || value === "") {
@@ -26,6 +27,7 @@ function parseRuntimeConfigObject(source, sessionString) {
   var configUrlValue;
   var apiId;
   var apiHash;
+  var useWSS;
 
   if (!source || typeof source !== "object") {
     return null;
@@ -33,7 +35,9 @@ function parseRuntimeConfigObject(source, sessionString) {
 
   apiIdValue = source.apiId !== undefined ? source.apiId : source.TG_API_ID;
   apiHashValue = source.apiHash !== undefined ? source.apiHash : source.TG_API_HASH;
-  useWSSValue = source.useWSS !== undefined ? source.useWSS : source.TG_TEST_USE_WSS;
+  useWSSValue = source.forceWSS !== undefined
+    ? source.forceWSS
+    : (source.useWSS !== undefined ? source.useWSS : source.TG_TEST_USE_WSS);
   testServersValue = source.testServers !== undefined ? source.testServers : source.TG_TEST_SERVERS;
   configUrlValue = source.configUrl !== undefined ? source.configUrl : source.TG_CONFIG_URL;
 
@@ -44,13 +48,16 @@ function parseRuntimeConfigObject(source, sessionString) {
     return null;
   }
 
+  useWSS = parseBoolean(useWSSValue, true);
+
   return {
     apiId: apiId,
     apiHash: apiHash,
     sessionString: String(sessionString == null ? "" : sessionString),
-    useWSS: parseBoolean(useWSSValue, true),
+    useWSS: useWSS,
+    forceWSS: useWSS,
     testServers: parseBoolean(testServersValue, false),
-    configUrl: String(configUrlValue == null || configUrlValue === "" ? "http://127.0.0.1:4173" : configUrlValue)
+    configUrl: String(configUrlValue == null || configUrlValue === "" ? DEFAULT_CONFIG_URL : configUrlValue)
   };
 }
 
@@ -60,6 +67,22 @@ function getDefaultEnvSource() {
   }
 
   return null;
+}
+
+function getCompiledRuntimeConfig() {
+  if (typeof __TG_PEBBLE_BUILTIN_RUNTIME_CONFIG__ !== "undefined") {
+    return __TG_PEBBLE_BUILTIN_RUNTIME_CONFIG__;
+  }
+
+  return null;
+}
+
+function getDefaultEmbeddedSource() {
+  if (typeof globalThis !== "undefined" && globalThis && globalThis.__TG_PEBBLE_BUILTIN_RUNTIME_CONFIG__) {
+    return globalThis.__TG_PEBBLE_BUILTIN_RUNTIME_CONFIG__;
+  }
+
+  return getCompiledRuntimeConfig();
 }
 
 function readStoredRuntimeConfig(storage) {
@@ -94,12 +117,18 @@ function readStoredRuntimeConfig(storage) {
 function loadTelegramRuntimeConfig(options) {
   var envSource;
   var storage;
+  var embeddedSource;
   var envConfig;
   var storedConfig;
+  var embeddedConfig;
+  var embeddedSessionString;
 
   options = options || {};
   envSource = Object.prototype.hasOwnProperty.call(options, "envSource") ? options.envSource : getDefaultEnvSource();
   storage = options.storage || null;
+  embeddedSource = Object.prototype.hasOwnProperty.call(options, "embeddedSource")
+    ? options.embeddedSource
+    : getDefaultEmbeddedSource();
 
   envConfig = parseRuntimeConfigObject(
     envSource,
@@ -115,11 +144,22 @@ function loadTelegramRuntimeConfig(options) {
     return storedConfig;
   }
 
+  embeddedSessionString = embeddedSource && embeddedSource.sessionString
+    ? embeddedSource.sessionString
+    : (embeddedSource ? embeddedSource.TG_SESSION_STRING : "");
+  embeddedConfig = parseRuntimeConfigObject(embeddedSource, embeddedSessionString);
+  if (embeddedConfig) {
+    embeddedConfig.source = "embedded";
+    return embeddedConfig;
+  }
+
   return null;
 }
 
 module.exports = {
+  DEFAULT_CONFIG_URL: DEFAULT_CONFIG_URL,
   RUNTIME_CONFIG_STORAGE_KEY: RUNTIME_CONFIG_STORAGE_KEY,
   loadTelegramRuntimeConfig: loadTelegramRuntimeConfig,
+  parseRuntimeConfigObject: parseRuntimeConfigObject,
   readStoredRuntimeConfig: readStoredRuntimeConfig
 };
