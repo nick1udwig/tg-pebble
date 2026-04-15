@@ -28,6 +28,49 @@ static int s_failures = 0;
     }                                                                           \
   } while (0)
 
+static bool is_valid_utf8(const char *value) {
+  const unsigned char *cursor = (const unsigned char *)value;
+  size_t remaining = 0;
+  unsigned char current;
+
+  if (!value) {
+    return false;
+  }
+
+  while ((current = *cursor++) != '\0') {
+    if (remaining > 0) {
+      if ((current & 0xC0U) != 0x80U) {
+        return false;
+      }
+      remaining -= 1;
+      continue;
+    }
+
+    if ((current & 0x80U) == 0x00U) {
+      continue;
+    }
+
+    if ((current & 0xE0U) == 0xC0U) {
+      remaining = 1;
+      continue;
+    }
+
+    if ((current & 0xF0U) == 0xE0U) {
+      remaining = 2;
+      continue;
+    }
+
+    if ((current & 0xF8U) == 0xF0U) {
+      remaining = 3;
+      continue;
+    }
+
+    return false;
+  }
+
+  return remaining == 0;
+}
+
 static void test_should_show_sender(void) {
   ASSERT_TRUE(tg_should_show_sender(0, false, 10));
   ASSERT_TRUE(!tg_should_show_sender(10, true, 10));
@@ -73,6 +116,21 @@ static void test_parse_message_item_payload(void) {
   ASSERT_STREQ("Morning", item.text);
 }
 
+static void test_parse_message_item_payload_truncates_to_valid_utf8(void) {
+  TgParsedMessageItem item;
+  const char *payload =
+      "Telegram|1|0|Login code: 31792. Do not give this code to anyone, even if they say they are from Telegram!\n\n"
+      "\xE2\x9D\x97\xEF\xB8\x8F"
+      "This code can be used to log in to your Telegram account. We never ask it for anything else.";
+
+  ASSERT_TRUE(tg_parse_message_item_payload(payload, &item));
+  ASSERT_TRUE(item.show_sender);
+  ASSERT_TRUE(!item.outgoing);
+  ASSERT_STREQ("Telegram", item.sender);
+  ASSERT_TRUE(strncmp(item.text, "Login code: 31792.", 18) == 0);
+  ASSERT_TRUE(is_valid_utf8(item.text));
+}
+
 static void test_parse_send_result_payload(void) {
   TgParsedSendResult result;
   TgParsedSettingsState settings;
@@ -104,6 +162,7 @@ int main(void) {
   test_sync_status_label();
   test_parse_chat_item_payload();
   test_parse_message_item_payload();
+  test_parse_message_item_payload_truncates_to_valid_utf8();
   test_parse_send_result_payload();
 
   if (s_failures > 0) {
