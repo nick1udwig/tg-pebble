@@ -2,7 +2,7 @@
   "name": "tg-pebble",
   "version": "0.1.0",
   "private": true,
-  "description": "Telegram client for Pebble (unofficial).",
+  "description": "Read your Telegram messages and send Telegram messages using dictation.",
   "keywords": [
     "pebble-app"
   ],
