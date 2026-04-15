@@ -75,14 +75,14 @@ jobs:
         run: npm run build:config:docs
 
       - name: Build public watch package
-        run: npm run build:watch
+        run: npm run build:watch:release
 
       - name: Upload public build artifact
         uses: actions/upload-artifact@v4
         with:
           name: tg-public-build-${{ github.sha }}
           path: |
-            build/tg-pebble.pbw
+            build/tg-pebble-release.pbw
             build/appinfo.json
             docs/config
           if-no-files-found: error

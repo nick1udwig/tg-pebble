@@ -32,7 +32,14 @@
       "SyncState": 3
     },
     "resources": {
-      "media": []
+      "media": [
+        {
+          "name": "APP_ICON",
+          "type": "bitmap",
+          "file": "tg-pebble-menu-icon.png",
+          "menuIcon": true
+        }
+      ]
     }
   },
   "scripts": {
@@ -62,7 +69,8 @@
     "test:emulator:states": "bash scripts/test-emulator-states.sh",
     "test:emulator:relaunch": "bash scripts/test-emulator-relaunch.sh",
     "test:emulator:visual": "bash scripts/test-emulator-visual.sh",
-    "build:config:docs": "node scripts/build-config-docs.mjs"
+    "build:config:docs": "node scripts/build-config-docs.mjs",
+    "build:watch:release": "npm run build:watch && node scripts/build-release-pbw.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.53.0",

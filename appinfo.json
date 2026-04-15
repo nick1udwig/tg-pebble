@@ -30,7 +30,7 @@
       {
         "name": "APP_ICON",
         "type": "bitmap",
-        "file": "assets/tg-pebble-icon.png",
+        "file": "tg-pebble-menu-icon.png",
         "menuIcon": true
       }
     ]
