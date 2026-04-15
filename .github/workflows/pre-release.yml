@@ -61,8 +61,29 @@ jobs:
       - name: Install Pebble SDK
         run: pebble sdk install latest
 
-      - name: Run pre-release test gate
-        run: npm run test:pre-release
+      - name: Run JS tests
+        run: npm run test:js
+
+      - name: Run C tests
+        run: npm run test:c
+
+      - name: Run config-page tests
+        run: npm run test:config
+
+      - name: Run emulator matrix
+        run: env TG_PEBBLE_SESSION_GUARDED=1 bash scripts/test-emulator-matrix.sh
+
+      - name: Run emulator zero-state coverage
+        run: env TG_PEBBLE_SESSION_GUARDED=1 bash scripts/test-emulator-states.sh "${TG_PEBBLE_STATE_PLATFORM:-basalt}"
+
+      - name: Run emulator relaunch coverage
+        run: env TG_PEBBLE_SESSION_GUARDED=1 bash scripts/test-emulator-relaunch.sh "${TG_PEBBLE_RELAUNCH_PLATFORM:-basalt}"
+
+      - name: Review visual diffs
+        run: bash scripts/review-visual-diffs.sh
+
+      - name: Run emulator soak
+        run: env TG_PEBBLE_SESSION_GUARDED=1 bash scripts/test-emulator-soak.sh "${TG_PEBBLE_SOAK_ITERATIONS:-2}" "${TG_PEBBLE_SOAK_PLATFORM:-basalt}"
 
       - name: Upload emulator and build artifacts
         if: always()
