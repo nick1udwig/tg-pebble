@@ -43,6 +43,34 @@ describe("telegram auth helpers", () => {
     expect(formatAccountLabel({ id: 42 })).toBe("42");
   });
 
+  it("requires a phone number before creating a Telegram client", async () => {
+    const clientFactory = vi.fn(() => {
+      throw new Error("Should not create client");
+    });
+
+    await expect(authorizeTelegramSession(
+      { apiId: 123456, apiHash: "hash", useWSS: true, testServers: false },
+      { phoneNumber: "", loginCode: "12345" },
+      clientFactory,
+    )).rejects.toThrow("Phone number is required.");
+
+    expect(clientFactory).not.toHaveBeenCalled();
+  });
+
+  it("requires a login code before creating a Telegram client", async () => {
+    const clientFactory = vi.fn(() => {
+      throw new Error("Should not create client");
+    });
+
+    await expect(authorizeTelegramSession(
+      { apiId: 123456, apiHash: "hash", useWSS: true, testServers: false },
+      { phoneNumber: "+15551234567", loginCode: "" },
+      clientFactory,
+    )).rejects.toThrow("Login code is required.");
+
+    expect(clientFactory).not.toHaveBeenCalled();
+  });
+
   it("authorizes a session through the provided client factory", async () => {
     const start = vi.fn(async (callbacks) => {
       expect(await callbacks.phoneNumber()).toBe("+15551234567");
@@ -72,6 +100,24 @@ describe("telegram auth helpers", () => {
     expect(disconnect).toHaveBeenCalledTimes(1);
   });
 
+  it("disconnects the client when authorization fails", async () => {
+    const disconnect = vi.fn(async () => {});
+    const client = {
+      start: vi.fn(async () => {
+        throw new Error("Code expired.");
+      }),
+      disconnect,
+    };
+
+    await expect(authorizeTelegramSession(
+      { apiId: 123456, apiHash: "hash", useWSS: true, testServers: false },
+      { phoneNumber: "+15551234567", loginCode: "12345", password: "secret" },
+      () => client,
+    )).rejects.toThrow("Code expired.");
+
+    expect(disconnect).toHaveBeenCalledTimes(1);
+  });
+
   it("logs out authorized sessions through the provided client factory", async () => {
     const invoke = vi.fn(async () => ({}));
     const disconnect = vi.fn(async () => {});
@@ -91,6 +137,28 @@ describe("telegram auth helpers", () => {
     expect(client.connect).toHaveBeenCalledTimes(1);
     expect(client.isUserAuthorized).toHaveBeenCalledTimes(1);
     expect(invoke).toHaveBeenCalledTimes(1);
+    expect(disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips logout requests for already-unauthorized sessions", async () => {
+    const invoke = vi.fn(async () => ({}));
+    const disconnect = vi.fn(async () => {});
+    const client = {
+      connect: vi.fn(async () => {}),
+      isUserAuthorized: vi.fn(async () => false),
+      invoke,
+      disconnect,
+    };
+
+    await revokeTelegramSession(
+      { apiId: 123456, apiHash: "hash", useWSS: true, testServers: false },
+      "saved-session",
+      () => client,
+    );
+
+    expect(client.connect).toHaveBeenCalledTimes(1);
+    expect(client.isUserAuthorized).toHaveBeenCalledTimes(1);
+    expect(invoke).not.toHaveBeenCalled();
     expect(disconnect).toHaveBeenCalledTimes(1);
   });
 });

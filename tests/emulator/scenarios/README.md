@@ -5,18 +5,28 @@ This directory is reserved for scripted emulator scenarios.
 Implemented scenarios:
 
 - `bash scripts/test-emulator.sh`
-  - boots the app in a manual `qemu-pebble + pypkjs` session
-  - uses an isolated PKJS/watch persist directory so settings and cache state do not leak across runs
-  - captures the fixture-backed chat list
-  - injects `Down` and `Select` through the QEMU monitor using the official `Q/W/S/X` keyboard mapping
-  - captures the first chat view
-  - runs emulator dictation through `pebble transcribe`
-  - captures the dictation listening screen, preview window, and post-send chat state
+  - parameterized single-scenario harness
+  - defaults to `basalt` dictation success
+  - supports read-only and dictation-failure scenarios through env vars
+- `bash scripts/test-emulator-matrix.sh`
+  - runs the local emulator confidence matrix
+  - `basalt` dictation success
+  - `basalt` dictation failures: `connectivity`, `disabled`, `no-speech-detected`
+  - `aplite` read-only navigation
+- `bash scripts/test-emulator-soak.sh`
+  - repeats the single-scenario harness to catch restart/persist regressions
+
+Harness details:
+
+- uses an isolated PKJS/watch persist directory per run
+- captures screenshots from the QEMU monitor
+- drives navigation through the official `Q/W/S/X` keyboard mapping
+- uses `pebble transcribe` for deterministic dictation success and failure
+- validates persisted PKJS storage after each run so the test asserts actual app state, not only screenshots/logs
 
 Planned follow-ups:
 
-- cached cold launch
-- cached warm launch
+- cached cold launch vs warm launch split
 - sync icon state matrix
-- dictation success and failure matrix
-- non-microphone read-only layout
+- config-page driven live login inside emulator
+- non-rectangular platform coverage if the app expands beyond the current target set

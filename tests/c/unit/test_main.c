@@ -106,6 +106,23 @@ static void test_parse_chat_item_payload(void) {
   ASSERT_STREQ("See you soon", item.preview);
 }
 
+static void test_parse_chat_item_payload_truncates_to_valid_utf8(void) {
+  TgParsedChatItem item;
+  const char *payload =
+      "1001|Telegram Support \xE2\x9D\x97\xEF\xB8\x8FTelegram Support \xE2\x9D\x97\xEF\xB8\x8F|"
+      "Login code: 31792. Do not share this code. \xE2\x9D\x97\xEF\xB8\x8F"
+      "Login code: 31792. Do not share this code. \xE2\x9D\x97\xEF\xB8\x8F|12";
+
+  ASSERT_TRUE(tg_parse_chat_item_payload(payload, &item));
+  ASSERT_TRUE(item.chat_id == 1001);
+  ASSERT_TRUE(item.unread_count == 12);
+  ASSERT_TRUE(strlen(item.title) < TG_CHAT_TITLE_LENGTH);
+  ASSERT_TRUE(strlen(item.preview) < TG_CHAT_PREVIEW_LENGTH);
+  ASSERT_TRUE(is_valid_utf8(item.title));
+  ASSERT_TRUE(is_valid_utf8(item.preview));
+  ASSERT_TRUE(strncmp(item.preview, "Login code: 31792.", 18) == 0);
+}
+
 static void test_parse_message_item_payload(void) {
   TgParsedMessageItem item;
 
@@ -156,14 +173,30 @@ static void test_parse_send_result_payload(void) {
   ASSERT_TRUE(settings.has_auth_error);
 }
 
+static void test_parse_send_result_payload_truncates_to_valid_utf8(void) {
+  TgParsedSendResult result;
+  const char *payload =
+      "error|Telegram send failed: \xE2\x9D\x97\xEF\xB8\x8F"
+      "Telegram send failed: \xE2\x9D\x97\xEF\xB8\x8F"
+      "Telegram send failed: \xE2\x9D\x97\xEF\xB8\x8F";
+
+  ASSERT_TRUE(tg_parse_send_result_payload(payload, &result));
+  ASSERT_TRUE(!result.ok);
+  ASSERT_TRUE(strlen(result.detail) < TG_STATUS_TEXT_LENGTH);
+  ASSERT_TRUE(is_valid_utf8(result.detail));
+  ASSERT_TRUE(strncmp(result.detail, "Telegram send failed:", 21) == 0);
+}
+
 int main(void) {
   test_should_show_sender();
   test_format_unread_badge();
   test_sync_status_label();
   test_parse_chat_item_payload();
+  test_parse_chat_item_payload_truncates_to_valid_utf8();
   test_parse_message_item_payload();
   test_parse_message_item_payload_truncates_to_valid_utf8();
   test_parse_send_result_payload();
+  test_parse_send_result_payload_truncates_to_valid_utf8();
 
   if (s_failures > 0) {
     fprintf(stderr, "%d C test(s) failed.\n", s_failures);

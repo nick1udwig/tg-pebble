@@ -63,9 +63,7 @@ async function authorizeTelegramSession(runtimeConfig, authState, clientFactory)
   var phoneNumber = String(nextAuthState.phoneNumber || "").trim();
   var loginCode = String(nextAuthState.loginCode || "").trim();
   var password = String(nextAuthState.password || "");
-  var client = typeof clientFactory === "function"
-    ? clientFactory("")
-    : createTelegramClient(runtimeConfig, "");
+  var client;
   var me;
 
   if (!phoneNumber) {
@@ -75,6 +73,10 @@ async function authorizeTelegramSession(runtimeConfig, authState, clientFactory)
   if (!loginCode) {
     throw new Error("Login code is required.");
   }
+
+  client = typeof clientFactory === "function"
+    ? clientFactory("")
+    : createTelegramClient(runtimeConfig, "");
 
   try {
     await client.start({

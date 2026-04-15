@@ -8,10 +8,12 @@ import {
   buildChatPagePayload,
   encodeMessage,
   MessageType,
+  ProtocolByteLimit,
   serializeChatItem,
   serializeMessageItem,
   serializeSettingsState,
   serializeSendResult,
+  utf8ByteLength,
 } from "../../../src/pkjs/lib/protocol.js";
 import { addSenderRunMetadata } from "../../../src/pkjs/lib/message_groups.js";
 
@@ -81,5 +83,60 @@ describe("watch/pkjs protocol fixtures", () => {
     );
     expect(serializeSettingsState({ sendMode: "preview", previewChatMessage: false })).toBe("preview|0|0|0");
     expect(serializeSettingsState({ sendMode: "auto", previewChatMessage: true, hasSession: true, hasAuthError: true })).toBe("auto|1|1|1");
+  });
+
+  it("normalizes separators and newlines before serializing", () => {
+    expect(
+      serializeChatItem({
+        id: 1001,
+        title: "Alice|Ops",
+        preview: "Line one\nLine two",
+        unreadCount: 2,
+      }),
+    ).toBe("1001|Alice/Ops|Line one Line two|2");
+  });
+
+  it("truncates serialized rows to watch-safe UTF-8 byte budgets", () => {
+    const emoji = "❗️";
+    const longTitle = `Support ${emoji}`.repeat(10);
+    const longPreview = `Login code: 31792. ${emoji} `.repeat(12);
+    const longSender = `Telegram ${emoji}`.repeat(6);
+    const longText = `Login code: 31792. Do not share this code. ${emoji} `.repeat(10);
+    const longError = `Fixture transport rejected the message ${emoji} `.repeat(8);
+
+    const chatPayload = serializeChatItem({
+      id: 1001,
+      title: longTitle,
+      preview: longPreview,
+      unreadCount: 2,
+    });
+    const messagePayload = serializeMessageItem({
+      senderName: longSender,
+      showSender: true,
+      outgoing: false,
+      text: longText,
+    });
+    const sendResultPayload = serializeSendResult({ ok: false, detail: longError });
+
+    const [chatId, title, preview, unreadCount] = chatPayload.split("|");
+    const [sender, showSender, outgoing, text] = messagePayload.split("|");
+    const [, errorDetail] = sendResultPayload.split("|");
+
+    expect(chatId).toBe("1001");
+    expect(unreadCount).toBe("2");
+    expect(showSender).toBe("1");
+    expect(outgoing).toBe("0");
+
+    expect(utf8ByteLength(title)).toBeLessThanOrEqual(ProtocolByteLimit.chatTitle);
+    expect(utf8ByteLength(preview)).toBeLessThanOrEqual(ProtocolByteLimit.chatPreview);
+    expect(utf8ByteLength(sender)).toBeLessThanOrEqual(ProtocolByteLimit.messageSender);
+    expect(utf8ByteLength(text)).toBeLessThanOrEqual(ProtocolByteLimit.messageText);
+    expect(utf8ByteLength(errorDetail)).toBeLessThanOrEqual(ProtocolByteLimit.sendResultDetail);
+
+    expect(title.endsWith(emoji)).toBe(false);
+    expect(preview.endsWith(emoji)).toBe(false);
+    expect(sender.endsWith(emoji)).toBe(false);
+    expect(text.endsWith(emoji)).toBe(false);
+    expect(errorDetail.endsWith(emoji)).toBe(false);
   });
 });

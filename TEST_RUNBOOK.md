@@ -1046,3 +1046,63 @@ As of this runbook:
 - the headless emulator launches the native watch shell successfully
 - end-to-end PKJS delivery in the headless emulator is working after the CommonJS conversion
 - persistent headless emulator reconnection remains a known limitation and should be handled by a future automation harness
+
+### 4.6.1 Run The Emulator Coverage Matrix
+
+Run:
+
+```bash
+npm run test:emulator:matrix
+```
+
+This extends the single smoke test into a deterministic local matrix:
+
+- `basalt` dictation success
+- `basalt` dictation failures for `connectivity`, `disabled`, and `no-speech-detected`
+- `aplite` read-only navigation without dictation
+
+Artifacts are prefixed per scenario under:
+
+- `tests/emulator/artifacts/`
+
+### 4.6.2 Run The Emulator Soak Pass
+
+Run:
+
+```bash
+npm run test:emulator:soak -- 2 basalt
+```
+
+This repeats the single-scenario emulator harness and is meant to catch:
+
+- restart/install regressions
+- stale persist-state bleed-through
+- repeated dictation/send failures
+
+### 4.5.1 Full Local Pre-Release Pass
+
+Run:
+
+```bash
+npm run test:pre-release
+```
+
+This runs the safe local pre-release checklist:
+
+- `npm run test:js`
+- `npm run test:c`
+- `npm run test:config`
+- `npm run test:emulator:matrix`
+- `scripts/test-emulator-soak.sh` with the default `2` basalt iterations
+
+Override soak defaults when needed:
+
+```bash
+TG_PEBBLE_SOAK_ITERATIONS=4 TG_PEBBLE_SOAK_PLATFORM=basalt npm run test:pre-release
+```
+
+Optional live Telegram checks remain gated. To include them in the pre-release pass:
+
+```bash
+TG_PEBBLE_RUN_LIVE_RELEASE_CHECKS=1 npm run test:pre-release
+```

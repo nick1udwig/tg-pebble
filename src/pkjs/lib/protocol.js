@@ -26,11 +26,103 @@ var AppMessageKey = Object.freeze({
   syncState: 3
 });
 
-function sanitizeField(value) {
-  return String(value == null ? "" : value)
-    .replace(/\|/g, "/")
-    .replace(/\r?\n/g, " ")
-    .trim();
+var ProtocolByteLimit = Object.freeze({
+  chatTitle: 31,
+  chatPreview: 63,
+  messageSender: 23,
+  messageText: 95,
+  sendResultDetail: 95
+});
+
+function utf8ByteLength(value) {
+  var length = 0;
+  var text = String(value == null ? "" : value);
+  var index;
+  var code;
+  var next;
+
+  for (index = 0; index < text.length; index += 1) {
+    code = text.charCodeAt(index);
+
+    if (code <= 0x7F) {
+      length += 1;
+      continue;
+    }
+
+    if (code <= 0x7FF) {
+      length += 2;
+      continue;
+    }
+
+    if (code >= 0xD800 && code <= 0xDBFF && index + 1 < text.length) {
+      next = text.charCodeAt(index + 1);
+      if (next >= 0xDC00 && next <= 0xDFFF) {
+        length += 4;
+        index += 1;
+        continue;
+      }
+    }
+
+    length += 3;
+  }
+
+  return length;
+}
+
+function truncateUtf8(value, maxBytes) {
+  var text = String(value == null ? "" : value);
+  var length = 0;
+  var end = 0;
+  var index;
+  var code;
+  var next;
+  var codeUnitLength;
+  var codeByteLength;
+
+  if (maxBytes == null || maxBytes < 0) {
+    return text;
+  }
+
+  for (index = 0; index < text.length; index += codeUnitLength) {
+    code = text.charCodeAt(index);
+    codeUnitLength = 1;
+    codeByteLength = 1;
+
+    if (code <= 0x7F) {
+      codeByteLength = 1;
+    } else if (code <= 0x7FF) {
+      codeByteLength = 2;
+    } else if (code >= 0xD800 && code <= 0xDBFF && index + 1 < text.length) {
+      next = text.charCodeAt(index + 1);
+      if (next >= 0xDC00 && next <= 0xDFFF) {
+        codeUnitLength = 2;
+        codeByteLength = 4;
+      } else {
+        codeByteLength = 3;
+      }
+    } else {
+      codeByteLength = 3;
+    }
+
+    if (length + codeByteLength > maxBytes) {
+      break;
+    }
+
+    length += codeByteLength;
+    end = index + codeUnitLength;
+  }
+
+  return text.slice(0, end);
+}
+
+function sanitizeField(value, maxBytes) {
+  return truncateUtf8(
+    String(value == null ? "" : value)
+      .replace(/\|/g, "/")
+      .replace(/\r?\n/g, " ")
+      .trim(),
+    maxBytes
+  );
 }
 
 function encodeMessage(type, payloadString, requestId, syncState) {
@@ -79,18 +171,18 @@ function buildChatPagePayload(params) {
 function serializeChatItem(chat) {
   return [
     sanitizeField(chat.id),
-    sanitizeField(chat.title),
-    sanitizeField(chat.preview),
+    sanitizeField(chat.title, ProtocolByteLimit.chatTitle),
+    sanitizeField(chat.preview, ProtocolByteLimit.chatPreview),
     sanitizeField(chat.unreadCount)
   ].join("|");
 }
 
 function serializeMessageItem(message) {
   return [
-    sanitizeField(message.senderName),
+    sanitizeField(message.senderName, ProtocolByteLimit.messageSender),
     message.showSender ? "1" : "0",
     message.outgoing ? "1" : "0",
-    sanitizeField(message.text)
+    sanitizeField(message.text, ProtocolByteLimit.messageText)
   ].join("|");
 }
 
@@ -99,7 +191,7 @@ function serializeSendResult(result) {
     return "ok";
   }
 
-  return "error|" + sanitizeField(result.detail || "");
+  return "error|" + sanitizeField(result.detail || "", ProtocolByteLimit.sendResultDetail);
 }
 
 function serializeSettingsState(settings) {
@@ -114,11 +206,13 @@ function serializeSettingsState(settings) {
 module.exports = {
   AppMessageKey: AppMessageKey,
   MessageType: MessageType,
+  ProtocolByteLimit: ProtocolByteLimit,
   buildChatListPagePayload: buildChatListPagePayload,
   buildChatPagePayload: buildChatPagePayload,
   encodeMessage: encodeMessage,
   serializeChatItem: serializeChatItem,
   serializeMessageItem: serializeMessageItem,
   serializeSettingsState: serializeSettingsState,
-  serializeSendResult: serializeSendResult
+  serializeSendResult: serializeSendResult,
+  utf8ByteLength: utf8ByteLength
 };

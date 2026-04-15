@@ -115,13 +115,23 @@ async function loadPkjsHarness(options = {}) {
     delete process.env[key];
   }
 
-  process.env.TG_API_ID = env.TG_API_ID || "123456";
-  process.env.TG_API_HASH = env.TG_API_HASH || "env-hash";
-  process.env.TG_TEST_USE_WSS = env.TG_TEST_USE_WSS || "false";
-  process.env.TG_TEST_SERVERS = env.TG_TEST_SERVERS || "false";
-  process.env.TG_CONFIG_URL = env.TG_CONFIG_URL || "http://127.0.0.1:4173";
-  if (env.TG_SESSION_STRING) {
-    process.env.TG_SESSION_STRING = env.TG_SESSION_STRING;
+  for (const key of envKeys) {
+    const hasOverride = Object.prototype.hasOwnProperty.call(env, key);
+    const value = hasOverride
+      ? env[key]
+      : {
+          TG_API_ID: "123456",
+          TG_API_HASH: "env-hash",
+          TG_TEST_USE_WSS: "false",
+          TG_TEST_SERVERS: "false",
+          TG_CONFIG_URL: "http://127.0.0.1:4173",
+        }[key];
+
+    if (value == null) {
+      delete process.env[key];
+    } else {
+      process.env[key] = String(value);
+    }
   }
 
   globalThis.localStorage = storage;
@@ -275,6 +285,76 @@ describe("PKJS config auth flow", () => {
       });
       expect(getSentPayloads(harness.sentMessages, "sync_status").at(-1)).toEqual({
         payload: "",
+        requestId: 0,
+        syncState: "desynced",
+      });
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("updates settings locally without attempting auth when login credentials are absent", async () => {
+    const harness = await loadPkjsHarness();
+
+    try {
+      const response = encodeConfigResponse("settings:update", {
+        phoneNumber: "+15551234567",
+        loginCode: "",
+        password: "",
+        sendMode: "auto",
+        previewChatMessage: true,
+      });
+
+      harness.listeners.get("webviewclosed")({ response });
+      await flushAsyncWork();
+
+      expect(harness.authorizeTelegramSession).not.toHaveBeenCalled();
+      expect(JSON.parse(harness.storage.getItem("tg_pebble:session"))).toEqual({
+        sessionString: "",
+        phoneNumber: "+15551234567",
+        accountLabel: "",
+        userId: "",
+      });
+      expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
+        payload: "auto|1|0|0",
+        requestId: 0,
+        syncState: "desynced",
+      });
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("surfaces configuration errors when Telegram auth env is unavailable", async () => {
+    const harness = await loadPkjsHarness({
+      env: {
+        TG_API_ID: null,
+        TG_API_HASH: null,
+        TG_TEST_USE_WSS: null,
+        TG_TEST_SERVERS: null,
+        TG_CONFIG_URL: null,
+        TG_SESSION_STRING: null,
+      },
+    });
+
+    try {
+      const response = encodeConfigResponse("config:save", {
+        phoneNumber: "+15551234567",
+        loginCode: "12345",
+        password: "secret",
+        sendMode: "preview",
+        previewChatMessage: false,
+      });
+
+      harness.listeners.get("webviewclosed")({ response });
+      await flushAsyncWork();
+
+      expect(harness.authorizeTelegramSession).not.toHaveBeenCalled();
+      expect(JSON.parse(harness.storage.getItem("tg_pebble:auth_state"))).toEqual({
+        errorMessage: "Telegram auth is not configured in this build.",
+      });
+      expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
+        payload: "preview|0|0|1",
         requestId: 0,
         syncState: "desynced",
       });
