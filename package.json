@@ -2,13 +2,13 @@
   "name": "tg-pebble",
   "version": "0.1.0",
   "private": true,
-  "description": "Telegram client for Pebble with PKJS, local cache, and watch-side UI.",
+  "description": "Telegram client for Pebble (unofficial).",
   "keywords": [
     "pebble-app"
   ],
-  "author": "TG Pebble",
+  "author": "tg",
   "pebble": {
-    "displayName": "TG Pebble",
+    "displayName": "tg",
     "uuid": "2f9865aa-e12b-47f2-b6fb-47f27a8ee101",
     "sdkVersion": "3",
     "enableMultiJS": true,

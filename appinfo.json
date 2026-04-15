@@ -1,8 +1,8 @@
 {
   "uuid": "2f9865aa-e12b-47f2-b6fb-47f27a8ee101",
-  "shortName": "TG Pebble",
-  "longName": "TG Pebble",
-  "companyName": "TG Pebble",
+  "shortName": "tg",
+  "longName": "tg",
+  "companyName": "tg",
   "versionLabel": "0.1",
   "sdkVersion": "3",
   "projectType": "native",
