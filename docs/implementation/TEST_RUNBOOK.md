@@ -4,8 +4,8 @@ This runbook documents how to set up the local test environment for TG Pebble, h
 
 It complements:
 
-- [SPEC.md](/root/git/tg-pebble/SPEC.md)
-- [TESTING_STRATEGY.md](/root/git/tg-pebble/TESTING_STRATEGY.md)
+- [SPEC.md](./SPEC.md)
+- [TESTING_STRATEGY.md](./TESTING_STRATEGY.md)
 
 ## 1. Scope
 

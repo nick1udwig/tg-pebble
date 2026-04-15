@@ -2,7 +2,7 @@
 
 This document defines the regression, frontend, emulator, and release-testing strategy for TG Pebble.
 
-It is written for the architecture in [SPEC.md](/root/git/tg-pebble/SPEC.md):
+It is written for the architecture in [SPEC.md](./SPEC.md):
 
 - Pebble watch app
 - PebbleKit JS (`pkjs`)

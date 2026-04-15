@@ -132,7 +132,7 @@ To include them in the pre-release pass:
 TG_PEBBLE_RUN_LIVE_RELEASE_CHECKS=1 npm run test:pre-release
 ```
 
-Only do this with a dedicated throwaway account/session and the guardrails documented in `TEST_RUNBOOK.md`.
+Only do this with a dedicated throwaway account/session and the guardrails documented in [`TEST_RUNBOOK.md`](./TEST_RUNBOOK.md).
 
 ## 8. Remaining Unknowns Without Hardware
 
