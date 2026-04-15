@@ -26,6 +26,8 @@ rm -f "${diff_dir}"/*.png
 env TG_PEBBLE_SESSION_GUARDED=1 bash scripts/test-emulator-matrix.sh
 env TG_PEBBLE_SESSION_GUARDED=1 bash scripts/test-emulator-states.sh "${platform}"
 env TG_PEBBLE_SESSION_GUARDED=1 bash scripts/test-emulator-relaunch.sh "${platform}"
+env TG_PEBBLE_SESSION_GUARDED=1 TG_PEBBLE_ARTIFACT_PREFIX="emery-success-" bash scripts/test-emulator.sh emery
+env TG_PEBBLE_SESSION_GUARDED=1 TG_PEBBLE_ARTIFACT_PREFIX="emery-state-sign-in-required-" TG_PEBBLE_EMULATOR_SCENARIO=zero-state TG_PEBBLE_EMULATOR_STATE_NAME=sign-in-required bash scripts/test-emulator.sh emery
 
 baseline_files=(
   "aplite-read-only-chat-list.png"
@@ -38,7 +40,11 @@ baseline_files=(
   "basalt-success-dictation-preview.png"
   "basalt-success-dictation-sent.png"
   "diorite-read-only-chat-list.png"
-  "emery-read-only-chat-list.png"
+  "emery-success-chat-list.png"
+  "emery-success-chat-open.png"
+  "emery-success-dictation-preview.png"
+  "emery-success-dictation-sent.png"
+  "emery-state-sign-in-required-chat-list.png"
   "flint-read-only-chat-list.png"
   "relaunch-basalt-cold-dictation-sent.png"
   "relaunch-basalt-warm-chat-open.png"

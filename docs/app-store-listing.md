@@ -43,10 +43,22 @@ Read your Telegram messages and send Telegram messages using dictation.
 
 ## Emery Screens
 
-1. Chat list
+1. Sign-in required
+
+![Emery sign-in required](./screenshots/emery/sign-in-required.png)
+
+2. Chat list
 
 ![Emery chat list](./screenshots/emery/chat-list.png)
 
-2. Chat open
+3. Chat open
 
 ![Emery chat open](./screenshots/emery/chat-open.png)
+
+4. Dictation preview
+
+![Emery dictation preview](./screenshots/emery/dictation-preview.png)
+
+5. Dictation sent
+
+![Emery dictation sent](./screenshots/emery/dictation-sent.png)
