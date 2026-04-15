@@ -2,7 +2,7 @@
 
 ## For Users
 
-![tg icon](./assets/tg-pebble-icon.png)
+![tg icon](./assets/tg-pebble-icon-144.png)
 
 tg is an unofficial Telegram client for Pebble watches. Read your Telegram messages on-wrist and send replies using dictation through the Pebble companion-hosted config flow.
 
