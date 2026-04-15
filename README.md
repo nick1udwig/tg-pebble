@@ -6,11 +6,13 @@
 
 tg is an unofficial Telegram client for Pebble watches. Read your Telegram messages on-wrist and send replies using dictation through the Pebble companion-hosted config flow.
 
-![Chat list](./docs/screenshots/chat-list.png)
-![Chat open](./docs/screenshots/chat-open.png)
-![Dictation preview](./docs/screenshots/dictation-preview.png)
-![Dictation sent](./docs/screenshots/dictation-sent.png)
-![Sign-in required](./docs/screenshots/sign-in-required.png)
+![Sign-in required](./docs/screenshots/other/sign-in-required.png)
+![Chat list](./docs/screenshots/other/chat-list.png)
+![Chat open](./docs/screenshots/other/chat-open.png)
+![Dictation preview](./docs/screenshots/other/dictation-preview.png)
+![Dictation sent](./docs/screenshots/other/dictation-sent.png)
+![Emery chat list](./docs/screenshots/emery/chat-list.png)
+![Emery chat open](./docs/screenshots/emery/chat-open.png)
 
 ## For Developers
 

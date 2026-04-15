@@ -23,20 +23,30 @@ Read your Telegram messages and send Telegram messages using dictation.
 
 1. Chat list
 
-![Chat list](./screenshots/chat-list.png)
+![Chat list](./screenshots/other/chat-list.png)
 
 2. Chat open
 
-![Chat open](./screenshots/chat-open.png)
+![Chat open](./screenshots/other/chat-open.png)
 
 3. Dictation preview
 
-![Dictation preview](./screenshots/dictation-preview.png)
+![Dictation preview](./screenshots/other/dictation-preview.png)
 
 4. Dictation sent
 
-![Dictation sent](./screenshots/dictation-sent.png)
+![Dictation sent](./screenshots/other/dictation-sent.png)
 
 5. Sign-in required
 
-![Sign-in required](./screenshots/sign-in-required.png)
+![Sign-in required](./screenshots/other/sign-in-required.png)
+
+## Emery Screens
+
+1. Chat list
+
+![Emery chat list](./screenshots/emery/chat-list.png)
+
+2. Chat open
+
+![Emery chat open](./screenshots/emery/chat-open.png)
