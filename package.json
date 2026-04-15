@@ -58,7 +58,10 @@
     "dev:config": "node scripts/serve-config-page.mjs --port 4173",
     "capture:baselines": "bash scripts/capture-baselines.sh",
     "review:visual": "bash scripts/review-visual-diffs.sh",
-    "build:telegram-runtime:force": "TG_PEBBLE_REBUILD_TELEGRAM_RUNTIME=1 bash scripts/build-telegram-runtime.sh"
+    "build:telegram-runtime:force": "TG_PEBBLE_REBUILD_TELEGRAM_RUNTIME=1 bash scripts/build-telegram-runtime.sh",
+    "test:emulator:states": "bash scripts/test-emulator-states.sh",
+    "test:emulator:relaunch": "bash scripts/test-emulator-relaunch.sh",
+    "test:emulator:visual": "bash scripts/test-emulator-visual.sh"
   },
   "devDependencies": {
     "@playwright/test": "^1.53.0",

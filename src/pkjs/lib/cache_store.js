@@ -1,3 +1,9 @@
+var protocol = require("./protocol");
+
+var ProtocolByteLimit = protocol.ProtocolByteLimit;
+var truncateUtf8 = protocol.truncateUtf8;
+var utf8ByteLength = protocol.utf8ByteLength;
+
 var CACHE_KEYS = Object.freeze({
   session: "session",
   settings: "settings",
@@ -16,6 +22,9 @@ var DEFAULT_SETTINGS = Object.freeze({
 var DEFAULT_AUTH_STATE = Object.freeze({
   errorMessage: ""
 });
+
+var MAX_CACHED_MESSAGES_PER_CHAT = 4;
+var MAX_CACHED_CHAT_LIST_BYTES = 407;
 
 function createMemoryStorage() {
   var data = {};
@@ -58,6 +67,98 @@ function normalizeAuthState(authState) {
   return {
     errorMessage: String(authState && authState.errorMessage ? authState.errorMessage : "")
   };
+}
+
+function normalizeChatText(value, maxBytes) {
+  return truncateUtf8(
+    String(value == null ? "" : value)
+      .replace(/\r?\n/g, " ")
+      .trim(),
+    maxBytes
+  );
+}
+
+function fitChatListWithinBudget(chats) {
+  var nextChats = chats.slice();
+  var longestPreviewLength;
+  var longestPreviewIndex;
+  var index;
+  var candidateLength;
+
+  while (nextChats.length > 0 && utf8ByteLength(JSON.stringify(nextChats)) > MAX_CACHED_CHAT_LIST_BYTES) {
+    longestPreviewLength = 0;
+    longestPreviewIndex = -1;
+
+    for (index = 0; index < nextChats.length; index += 1) {
+      candidateLength = utf8ByteLength(nextChats[index].preview || "");
+      if (candidateLength > longestPreviewLength) {
+        longestPreviewLength = candidateLength;
+        longestPreviewIndex = index;
+      }
+    }
+
+    if (longestPreviewIndex >= 0 && longestPreviewLength > 0) {
+      nextChats[longestPreviewIndex] = Object.assign({}, nextChats[longestPreviewIndex], {
+        preview: truncateUtf8(nextChats[longestPreviewIndex].preview, longestPreviewLength - 1)
+      });
+      continue;
+    }
+
+    nextChats.pop();
+  }
+
+  return nextChats;
+}
+
+function normalizeChatList(chats) {
+  var nextChats = [];
+  var index;
+  var chat;
+
+  chats = Array.isArray(chats) ? chats : [];
+
+  for (index = 0; index < chats.length; index += 1) {
+    chat = chats[index] || {};
+    nextChats.push(Object.assign({}, chat, {
+      title: normalizeChatText(chat.title, ProtocolByteLimit.chatTitle),
+      preview: normalizeChatText(chat.preview, ProtocolByteLimit.chatPreview)
+    }));
+  }
+
+  return fitChatListWithinBudget(nextChats);
+}
+
+function normalizeMessage(message) {
+  message = message || {};
+
+  return {
+    senderId: message.senderId,
+    senderName: normalizeChatText(message.senderName, ProtocolByteLimit.messageSender),
+    outgoing: message.outgoing === true,
+    text: normalizeChatText(message.text, ProtocolByteLimit.messageText),
+    showSender: message.showSender === true
+  };
+}
+
+function normalizeMessagePages(pages) {
+  var nextPages = {};
+  var keys;
+  var index;
+  var key;
+  var messages;
+
+  pages = pages && typeof pages === "object" ? pages : {};
+  keys = Object.keys(pages);
+
+  for (index = 0; index < keys.length; index += 1) {
+    key = keys[index];
+    messages = Array.isArray(pages[key]) ? pages[key] : [];
+    nextPages[key] = messages
+      .slice(-MAX_CACHED_MESSAGES_PER_CHAT)
+      .map(normalizeMessage);
+  }
+
+  return nextPages;
 }
 
 function createCacheStore(storage, options) {
@@ -131,13 +232,13 @@ function createCacheStore(storage, options) {
       return getJson(CACHE_KEYS.chatList, []);
     },
     setChatList: function(chats) {
-      return setJson(CACHE_KEYS.chatList, chats);
+      return setJson(CACHE_KEYS.chatList, normalizeChatList(chats));
     },
     getMessagePages: function() {
       return getJson(CACHE_KEYS.messagePages, {});
     },
     setMessagePages: function(pages) {
-      return setJson(CACHE_KEYS.messagePages, pages);
+      return setJson(CACHE_KEYS.messagePages, normalizeMessagePages(pages));
     },
     getChatRefs: function() {
       return getJson(CACHE_KEYS.chatRefs, {});

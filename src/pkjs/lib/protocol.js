@@ -214,5 +214,6 @@ module.exports = {
   serializeMessageItem: serializeMessageItem,
   serializeSettingsState: serializeSettingsState,
   serializeSendResult: serializeSendResult,
+  truncateUtf8: truncateUtf8,
   utf8ByteLength: utf8ByteLength
 };

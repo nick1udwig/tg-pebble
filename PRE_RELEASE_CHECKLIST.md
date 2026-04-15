@@ -1,6 +1,6 @@
 # TG Pebble Pre-Release Checklist
 
-This checklist is the highest-confidence local test plan available without a physical watch.
+This is the highest-confidence local test plan available without a physical watch.
 
 ## 1. Fast Regression Layer
 
@@ -30,11 +30,10 @@ npm run test:emulator:matrix
 This covers:
 
 - `basalt` dictation success
-- `basalt` dictation failures for:
-  - `connectivity`
-  - `disabled`
-  - `no-speech-detected`
-- `aplite` read-only chat navigation without dictation
+- `basalt` send failure after a successful transcript
+- `basalt` long dictation text
+- `basalt` dictation failures for `connectivity`, `disabled`, and `no-speech-detected`
+- `aplite`, `diorite`, `emery`, and `flint` read-only navigation
 
 Artifacts land under:
 
@@ -42,7 +41,45 @@ Artifacts land under:
 
 Prefixed outputs indicate the platform/scenario that produced them.
 
-## 3. Emulator Soak Layer
+## 3. Emulator State Layer
+
+Run:
+
+```bash
+npm run test:emulator:states
+npm run test:emulator:relaunch
+```
+
+This covers:
+
+- signed-out watch state
+- auth-error watch state
+- empty-but-signed-in watch state
+- persisted warm relaunch after a successful send
+
+## 4. Visual Regression Layer
+
+Run:
+
+```bash
+npm run review:visual
+```
+
+To refresh the committed emulator baselines first:
+
+```bash
+npm run capture:baselines
+```
+
+This compares the current deterministic emulator screenshots against:
+
+- `tests/emulator/baselines/`
+
+Diff images are written to:
+
+- `tests/emulator/artifacts/diffs/`
+
+## 5. Emulator Soak Layer
 
 Run:
 
@@ -58,7 +95,7 @@ This is meant to catch:
 - repeated startup/install issues
 - repeated dictation/send regressions
 
-## 4. Full Safe Local Pass
+## 6. Full Safe Local Pass
 
 Run:
 
@@ -72,6 +109,9 @@ This runs the safe local stack:
 - C tests
 - config-page tests
 - emulator matrix
+- zero-state coverage
+- warm relaunch coverage
+- visual diff review
 - emulator soak
 
 The default soak pass is `2` basalt iterations.
@@ -82,7 +122,7 @@ Override when needed:
 TG_PEBBLE_SOAK_ITERATIONS=4 TG_PEBBLE_SOAK_PLATFORM=basalt npm run test:pre-release
 ```
 
-## 5. Optional Live Telegram Checks
+## 7. Optional Live Telegram Checks
 
 These remain opt-in because they can hit a real Telegram account.
 
@@ -94,7 +134,7 @@ TG_PEBBLE_RUN_LIVE_RELEASE_CHECKS=1 npm run test:pre-release
 
 Only do this with a dedicated throwaway account/session and the guardrails documented in `TEST_RUNBOOK.md`.
 
-## 6. Remaining Unknowns Without Hardware
+## 8. Remaining Unknowns Without Hardware
 
 Even after the full checklist passes, these are still hardware-only risks:
 

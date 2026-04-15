@@ -1058,14 +1058,52 @@ npm run test:emulator:matrix
 This extends the single smoke test into a deterministic local matrix:
 
 - `basalt` dictation success
+- `basalt` send failure after a successful transcript
+- `basalt` long dictation text
 - `basalt` dictation failures for `connectivity`, `disabled`, and `no-speech-detected`
-- `aplite` read-only navigation without dictation
+- `aplite`, `diorite`, `emery`, and `flint` read-only navigation without dictation
 
 Artifacts are prefixed per scenario under:
 
 - `tests/emulator/artifacts/`
 
-### 4.6.2 Run The Emulator Soak Pass
+### 4.6.2 Run The Emulator Zero-State And Relaunch Lanes
+
+Run:
+
+```bash
+npm run test:emulator:states
+npm run test:emulator:relaunch
+```
+
+These cover:
+
+- signed-out watch state
+- auth-error watch state
+- empty-but-signed-in watch state
+- warm relaunch with persisted chat state
+
+### 4.6.3 Review Visual Emulator Diffs
+
+Run:
+
+```bash
+npm run review:visual
+```
+
+Refresh the committed baselines first when the intended screenshots change:
+
+```bash
+npm run capture:baselines
+```
+
+The committed baseline set intentionally excludes emulator-only unstable dictation-error frames such as `connectivity`, `disabled`, and `no-speech-detected`; those remain covered by functional emulator assertions instead of pixel diffs.
+
+Diff images are written under:
+
+- `tests/emulator/artifacts/diffs/`
+
+### 4.6.4 Run The Emulator Soak Pass
 
 Run:
 
@@ -1093,6 +1131,9 @@ This runs the safe local pre-release checklist:
 - `npm run test:c`
 - `npm run test:config`
 - `npm run test:emulator:matrix`
+- `npm run test:emulator:states`
+- `npm run test:emulator:relaunch`
+- `npm run review:visual`
 - `scripts/test-emulator-soak.sh` with the default `2` basalt iterations
 
 Override soak defaults when needed:

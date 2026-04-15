@@ -5,6 +5,7 @@ platform="${1:-basalt}"
 pbw_path="${2:-build/tg-pebble.pbw}"
 session_file="${3:-build/tests/emulator-session.json}"
 persist_dir_override="${4:-}"
+skip_app_install="${TG_PEBBLE_SKIP_APP_INSTALL:-0}"
 
 if ! command -v pebble >/dev/null 2>&1; then
   echo "pebble-tool is not installed or not on PATH." >&2
@@ -179,7 +180,7 @@ read -r -a platform_args <<<"$(qemu_platform_args)"
   -gdb "tcp::${qemu_gdb_port},server,nowait" \
   -monitor "tcp::${qemu_monitor_port},server,nowait" \
   -L "${pc_bios_dir}" \
-  -vnc :1 \
+  -display none \
   "${platform_args[@]}" \
   >"${qemu_log}" 2>&1 &
 qemu_pid=$!
@@ -235,4 +236,6 @@ Path("/tmp/pb-qemu-pypkjs-${qemu_port}.json").write_text(
 print(json.dumps(session, indent=2))
 PY
 
-pebble install "${pbw_path}" --qemu "localhost:${qemu_port}" >/dev/null
+if [[ "${skip_app_install}" != "1" && "${skip_app_install}" != "true" ]]; then
+  pebble install "${pbw_path}" --qemu "localhost:${qemu_port}" >/dev/null
+fi
