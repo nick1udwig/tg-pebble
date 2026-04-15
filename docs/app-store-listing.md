@@ -9,6 +9,12 @@
 - Support Email: `nick.b.ludwig@proton.me`
 - Source: `https://github.com/nick1udwig/tg-pebble`
 
+## App Icon
+
+Use [`assets/tg-pebble-icon.png`](../assets/tg-pebble-icon.png) for the store icon submission.
+
+![App icon](../assets/tg-pebble-icon.png)
+
 ## Listing Text
 
 Read your Telegram messages and send Telegram messages using dictation.

@@ -26,6 +26,13 @@
     "SyncState": 3
   },
   "resources": {
-    "media": []
+    "media": [
+      {
+        "name": "APP_ICON",
+        "type": "bitmap",
+        "file": "assets/tg-pebble-icon.png",
+        "menuIcon": true
+      }
+    ]
   }
 }
