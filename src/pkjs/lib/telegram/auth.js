@@ -4,6 +4,13 @@ var Api = runtime.Api;
 var TelegramClient = runtime.TelegramClient;
 var StringSession = runtime.StringSession;
 
+function buildApiCredentials(runtimeConfig) {
+  return {
+    apiId: runtimeConfig.apiId,
+    apiHash: runtimeConfig.apiHash
+  };
+}
+
 function buildTelegramClientParams(runtimeConfig) {
   return {
     connectionRetries: runtimeConfig.connectionRetries == null ? 3 : runtimeConfig.connectionRetries,
@@ -34,6 +41,12 @@ function createTelegramClient(runtimeConfig, sessionString) {
   );
 }
 
+async function ensureTelegramClientConnected(client) {
+  if (!client.connected && typeof client.connect === "function") {
+    await client.connect();
+  }
+}
+
 function formatAccountLabel(me) {
   var firstName;
   var lastName;
@@ -58,12 +71,48 @@ function formatAccountLabel(me) {
   return String(me.id || "");
 }
 
+async function requestTelegramLoginCode(runtimeConfig, authState, clientFactory) {
+  var nextAuthState = authState || {};
+  var phoneNumber = String(nextAuthState.phoneNumber || "").trim();
+  var client;
+  var sendCodeResult;
+
+  if (!phoneNumber) {
+    throw new Error("Phone number is required.");
+  }
+
+  client = typeof clientFactory === "function"
+    ? clientFactory("")
+    : createTelegramClient(runtimeConfig, "");
+
+  try {
+    await ensureTelegramClientConnected(client);
+    sendCodeResult = await client.sendCode(buildApiCredentials(runtimeConfig), phoneNumber, false);
+
+    if (!sendCodeResult || typeof sendCodeResult.phoneCodeHash !== "string") {
+      throw new Error("Failed to retrieve Telegram phone code hash.");
+    }
+
+    return {
+      phoneNumber: phoneNumber,
+      phoneCodeHash: sendCodeResult.phoneCodeHash,
+      isCodeViaApp: sendCodeResult.isCodeViaApp === true
+    };
+  } finally {
+    if (client && typeof client.disconnect === "function") {
+      await client.disconnect().catch(function() {});
+    }
+  }
+}
+
 async function authorizeTelegramSession(runtimeConfig, authState, clientFactory) {
   var nextAuthState = authState || {};
   var phoneNumber = String(nextAuthState.phoneNumber || "").trim();
   var loginCode = String(nextAuthState.loginCode || "").trim();
   var password = String(nextAuthState.password || "");
+  var phoneCodeHash = String(nextAuthState.phoneCodeHash || "").trim();
   var client;
+  var signInResult;
   var me;
 
   if (!phoneNumber) {
@@ -79,6 +128,48 @@ async function authorizeTelegramSession(runtimeConfig, authState, clientFactory)
     : createTelegramClient(runtimeConfig, "");
 
   try {
+    if (phoneCodeHash) {
+      await ensureTelegramClientConnected(client);
+
+      try {
+        signInResult = await client.invoke(new Api.auth.SignIn({
+          phoneNumber: phoneNumber,
+          phoneCodeHash: phoneCodeHash,
+          phoneCode: loginCode
+        }));
+        if (signInResult instanceof Api.auth.AuthorizationSignUpRequired) {
+          throw new Error("Telegram sign-up is required. Create the account in Telegram first.");
+        }
+        me = signInResult && signInResult.user ? signInResult.user : null;
+      } catch (error) {
+        if (!error || error.errorMessage !== "SESSION_PASSWORD_NEEDED") {
+          throw error;
+        }
+        if (!password) {
+          throw new Error("2FA password is required for this Telegram account.");
+        }
+        me = await client.signInWithPassword(buildApiCredentials(runtimeConfig), {
+          password: async function() {
+            return password;
+          },
+          onError: async function(passwordError) {
+            throw passwordError;
+          }
+        });
+      }
+
+      if (!me) {
+        me = await client.getMe();
+      }
+
+      return {
+        sessionString: client.session.save(),
+        phoneNumber: phoneNumber,
+        accountLabel: formatAccountLabel(me),
+        userId: me && me.id != null ? String(me.id) : ""
+      };
+    }
+
     await client.start({
       phoneNumber: async function() {
         return phoneNumber;
@@ -131,5 +222,6 @@ module.exports = {
   buildTelegramClientParams: buildTelegramClientParams,
   createTelegramClient: createTelegramClient,
   formatAccountLabel: formatAccountLabel,
+  requestTelegramLoginCode: requestTelegramLoginCode,
   revokeTelegramSession: revokeTelegramSession
 };

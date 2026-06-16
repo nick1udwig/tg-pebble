@@ -63,7 +63,28 @@ describe("createPkjsApp", () => {
       hasSession: true,
       accountLabel: "Alice Example",
       authError: "",
+      codeRequested: false,
+      codeDelivery: "",
     });
+  });
+
+  it("exposes pending login-code requests without exposing the code hash", () => {
+    const app = createPkjsApp({ storage: createMemoryStorage() });
+
+    app.setSession({ sessionString: "", phoneNumber: "+15551234567" });
+    app.setAuthCodeRequest({
+      phoneNumber: "+15551234567",
+      phoneCodeHash: "hash-123",
+      isCodeViaApp: true,
+    });
+
+    expect(app.getPendingAuthCodeHash("+15551234567")).toBe("hash-123");
+    expect(app.getConfigState()).toMatchObject({
+      phoneNumber: "+15551234567",
+      codeRequested: true,
+      codeDelivery: "app",
+    });
+    expect(app.getConfigState()).not.toHaveProperty("phoneCodeHash");
   });
 
   it("persists auth errors in config state until a live session is stored", () => {

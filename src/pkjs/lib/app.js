@@ -88,14 +88,18 @@ function createPkjsApp(options) {
     var settings = cache.getSettings();
     var session = cache.getSession() || {};
     var authState = cache.getAuthState();
+    var pendingPhoneNumber = String(authState.phoneNumber || "").trim();
+    var sessionPhoneNumber = String(session.phoneNumber || "").trim();
 
     return {
-      phoneNumber: String(session.phoneNumber || ""),
+      phoneNumber: sessionPhoneNumber,
       sendMode: settings.sendMode,
       previewChatMessage: settings.previewChatMessage === true,
       hasSession: !!session.sessionString,
       accountLabel: String(session.accountLabel || ""),
-      authError: String(authState.errorMessage || "")
+      authError: String(authState.errorMessage || ""),
+      codeRequested: !!authState.phoneCodeHash && !!pendingPhoneNumber && pendingPhoneNumber === sessionPhoneNumber,
+      codeDelivery: String(authState.codeDelivery || "")
     };
   }
 
@@ -311,6 +315,7 @@ function createPkjsApp(options) {
     },
     setAuthError: function(message) {
       var nextMessage = String(message || "").trim();
+      var currentAuthState = cache.getAuthState();
 
       if (!nextMessage) {
         cache.clearAuthState();
@@ -319,9 +324,33 @@ function createPkjsApp(options) {
         };
       }
 
-      return cache.setAuthState({
+      return cache.setAuthState(Object.assign({}, currentAuthState, {
         errorMessage: nextMessage
+      }));
+    },
+    setAuthCodeRequest: function(request) {
+      request = request || {};
+      return cache.setAuthState({
+        errorMessage: "",
+        phoneNumber: String(request.phoneNumber || "").trim(),
+        phoneCodeHash: String(request.phoneCodeHash || ""),
+        codeDelivery: request.isCodeViaApp === true ? "app" : "sms",
+        codeRequestedAt: Date.now()
       });
+    },
+    getAuthState: function() {
+      return cache.getAuthState();
+    },
+    getPendingAuthCodeHash: function(phoneNumber) {
+      var authState = cache.getAuthState();
+      var requestedPhoneNumber = String(authState.phoneNumber || "").trim();
+      var nextPhoneNumber = String(phoneNumber || "").trim();
+
+      if (!authState.phoneCodeHash || requestedPhoneNumber !== nextPhoneNumber) {
+        return "";
+      }
+
+      return String(authState.phoneCodeHash || "");
     },
     clearAuthError: function() {
       cache.clearAuthState();

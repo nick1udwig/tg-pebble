@@ -20,7 +20,11 @@ var DEFAULT_SETTINGS = Object.freeze({
 });
 
 var DEFAULT_AUTH_STATE = Object.freeze({
-  errorMessage: ""
+  errorMessage: "",
+  phoneNumber: "",
+  phoneCodeHash: "",
+  codeDelivery: "",
+  codeRequestedAt: 0
 });
 
 var MAX_CACHED_MESSAGES_PER_CHAT = 4;
@@ -64,8 +68,16 @@ function mergeSettings(settings) {
 }
 
 function normalizeAuthState(authState) {
+  var codeRequestedAt = Number(authState && authState.codeRequestedAt);
+
   return {
-    errorMessage: String(authState && authState.errorMessage ? authState.errorMessage : "")
+    errorMessage: String(authState && authState.errorMessage ? authState.errorMessage : ""),
+    phoneNumber: String(authState && authState.phoneNumber ? authState.phoneNumber : "").trim(),
+    phoneCodeHash: String(authState && authState.phoneCodeHash ? authState.phoneCodeHash : ""),
+    codeDelivery: authState && authState.codeDelivery === "app" ? "app" : (
+      authState && authState.codeDelivery === "sms" ? "sms" : ""
+    ),
+    codeRequestedAt: Number.isFinite(codeRequestedAt) && codeRequestedAt > 0 ? codeRequestedAt : 0
   };
 }
 

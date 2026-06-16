@@ -22,6 +22,8 @@ test("loads embedded state and submits config changes in one payload", async ({ 
     previewChatMessage: true,
     hasSession: true,
     accountLabel: "Test User",
+    codeRequested: true,
+    codeDelivery: "app",
   }));
 
   await page.goto(`/?state=${initialState}`);
@@ -32,15 +34,26 @@ test("loads embedded state and submits config changes in one payload", async ({ 
   await expect(page.locator("#send-mode-auto")).toBeChecked();
 
   await page.fill("#phone-number", "+15551234567");
+  await page.click("#request-code");
   await page.fill("#login-code", "12345");
   await page.fill("#password", "hunter2");
   await page.check("#send-mode-preview");
   await page.uncheck("#preview-chat-message");
   await page.click("#save-login");
 
-  await expect(page.locator("#status-banner")).toHaveText("Closing to save settings and sign in.");
+  await expect(page.locator("#status-banner")).toHaveText("Closing to sign in.");
 
   const submitted = await page.evaluate(() => window.__submitted);
+  expect(submitted).toContainEqual({
+    action: "auth:request-code",
+    state: {
+      phoneNumber: "+15551234567",
+      loginCode: "",
+      password: "",
+      sendMode: "auto",
+      previewChatMessage: true,
+    },
+  });
   expect(submitted).toContainEqual({
     action: "config:save",
     state: {
@@ -59,6 +72,8 @@ test("loads embedded state and submits config changes in one payload", async ({ 
     previewChatMessage: false,
     hasSession: true,
     accountLabel: "Test User",
+    codeRequested: true,
+    codeDelivery: "",
   });
   expect(stored.loginCode).toBeUndefined();
   expect(stored.password).toBeUndefined();

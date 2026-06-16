@@ -135,10 +135,12 @@ Flow:
 
 1. User opens app config from the Pebble app.
 2. User enters phone number.
-3. User enters Telegram login code.
-4. User enters 2FA password if required.
-5. `pkjs` stores session material locally.
-6. Watch app can then load chats from cache and refresh from Telegram.
+3. User requests a Telegram login code.
+4. `pkjs` stores Telegram's pending `phone_code_hash` locally.
+5. User enters the received Telegram login code.
+6. User enters 2FA password if required.
+7. `pkjs` stores session material locally.
+8. Watch app can then load chats from cache and refresh from Telegram.
 
 ### 6.3 Session Semantics
 

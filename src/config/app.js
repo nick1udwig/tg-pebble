@@ -9,6 +9,8 @@ const DEFAULT_STATE = Object.freeze({
   hasSession: false,
   accountLabel: "",
   authError: "",
+  codeRequested: false,
+  codeDelivery: "",
 });
 
 function sanitizePersistedState(state) {
@@ -21,6 +23,8 @@ function sanitizePersistedState(state) {
     hasSession: source.hasSession === true,
     accountLabel: String(source.accountLabel ?? "").trim(),
     authError: String(source.authError ?? "").trim(),
+    codeRequested: source.codeRequested === true,
+    codeDelivery: source.codeDelivery === "app" ? "app" : (source.codeDelivery === "sms" ? "sms" : ""),
   };
 }
 
@@ -93,6 +97,14 @@ function setSessionState(state) {
     return;
   }
 
+  if (state.codeRequested === true) {
+    label.textContent = state.codeDelivery === "sms"
+      ? "Login code requested by SMS."
+      : "Login code requested in Telegram.";
+    label.dataset.kind = "success";
+    return;
+  }
+
   label.textContent = "No Telegram session stored.";
   label.dataset.kind = "info";
 }
@@ -124,7 +136,13 @@ function setInitialStatus(state) {
   }
 
   setStatus(
-    state.hasSession ? "Current PKJS session loaded." : "Save changes to update settings or sign in.",
+    state.hasSession
+      ? "Current PKJS session loaded."
+      : (
+        state.codeRequested
+          ? "Enter the login code from Telegram, then sign in."
+          : "Save changes to update settings or request a login code."
+      ),
     state.hasSession ? "success" : "info",
   );
 }
@@ -157,6 +175,26 @@ function bootstrap() {
     setStatus(`Chat previews ${currentState.previewChatMessage ? "enabled" : "disabled"} locally.`, "success");
   });
 
+  document.querySelector("#request-code").addEventListener("click", () => {
+    const nextState = readFormState();
+
+    if (!nextState.phoneNumber) {
+      setStatus("Enter a phone number before requesting a code.", "error");
+      return;
+    }
+
+    currentState = {
+      ...currentState,
+      ...nextState,
+      authError: "",
+      codeRequested: true,
+      codeDelivery: "",
+    };
+    saveState(currentState);
+    getBridge().submit({ action: "auth:request-code", state: nextState });
+    setStatus("Closing to request a Telegram login code.", "success");
+  });
+
   document.querySelector("#save-login").addEventListener("click", () => {
     const nextState = readFormState();
     currentState = { ...currentState, ...nextState, authError: "" };
@@ -164,7 +202,7 @@ function bootstrap() {
     getBridge().submit({ action: "config:save", state: nextState });
     setStatus(
       nextState.phoneNumber && nextState.loginCode
-        ? "Closing to save settings and sign in."
+        ? "Closing to sign in."
         : "Closing to save settings.",
       "success",
     );

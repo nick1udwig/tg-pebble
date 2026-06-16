@@ -31,6 +31,26 @@ describe("createCacheStore", () => {
     expect(store.getSettings()).toEqual({ sendMode: "auto", previewChatMessage: true });
   });
 
+  it("normalizes pending auth code state", () => {
+    const store = createCacheStore(createMemoryStorage());
+
+    store.setAuthState({
+      errorMessage: "Code expired.",
+      phoneNumber: " +15551234567 ",
+      phoneCodeHash: "hash-123",
+      codeDelivery: "app",
+      codeRequestedAt: 1234,
+    });
+
+    expect(store.getAuthState()).toEqual({
+      errorMessage: "Code expired.",
+      phoneNumber: "+15551234567",
+      phoneCodeHash: "hash-123",
+      codeDelivery: "app",
+      codeRequestedAt: 1234,
+    });
+  });
+
   it("clears chats and message pages without deleting the session", () => {
     const store = createCacheStore(createMemoryStorage());
 

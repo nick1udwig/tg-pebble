@@ -20,6 +20,7 @@ var SyncState = syncStateLib.SyncState;
 var createTelegramAdapter = telegramAdapterLib.createTelegramAdapter;
 var authorizeTelegramSession = telegramAuthLib.authorizeTelegramSession;
 var createTelegramClient = telegramAuthLib.createTelegramClient;
+var requestTelegramLoginCode = telegramAuthLib.requestTelegramLoginCode;
 var revokeTelegramSession = telegramAuthLib.revokeTelegramSession;
 var compiledFixtureMode = (typeof __TG_PEBBLE_FIXTURE_MODE__ === "string" ? __TG_PEBBLE_FIXTURE_MODE__ : "false") === "true";
 
@@ -201,6 +202,21 @@ function rememberPhoneNumber(phoneNumber) {
   });
 }
 
+function applyConfigSettings(nextState) {
+  if (nextState.sendMode) {
+    app.setSendMode(nextState.sendMode);
+  }
+  app.setPreviewChatMessage(nextState.previewChatMessage === true);
+  rememberPhoneNumber(nextState.phoneNumber);
+}
+
+function failAuthConfiguration(message) {
+  app.setAuthError(message);
+  app.refreshFailed();
+  sendSettingsState(SyncState.desynced);
+  sendEnvelope(MessageType.syncStatus, "", 0, SyncState.desynced);
+}
+
 function sendChatItems(chats, index, onComplete, onError) {
   if (index >= chats.length) {
     onComplete();
@@ -291,27 +307,31 @@ async function sendChatPage(chatId) {
 
 async function handleConfigSave(state) {
   var nextState = state || {};
+  var phoneCodeHash;
 
-  if (nextState.sendMode) {
-    app.setSendMode(nextState.sendMode);
-  }
-  app.setPreviewChatMessage(nextState.previewChatMessage === true);
-  rememberPhoneNumber(nextState.phoneNumber);
+  applyConfigSettings(nextState);
 
   if (nextState.phoneNumber && nextState.loginCode) {
     if (!telegramRuntimeConfig || typeof telegramClientFactory !== "function") {
-      app.setAuthError("Telegram auth is not configured in this build.");
-      app.refreshFailed();
-      sendSettingsState(SyncState.desynced);
+      failAuthConfiguration("Telegram auth is not configured in this build.");
       return;
     }
 
-    app.clearAuthError();
+    phoneCodeHash = app.getPendingAuthCodeHash(nextState.phoneNumber);
+    if (!phoneCodeHash) {
+      failAuthConfiguration("Request a Telegram login code first.");
+      return;
+    }
+
     app.refreshStarted();
     sendEnvelope(MessageType.syncStatus, "", 0, SyncState.syncing);
 
     try {
-      app.setSession(await authorizeTelegramSession(telegramRuntimeConfig, nextState, telegramClientFactory));
+      app.setSession(await authorizeTelegramSession(
+        telegramRuntimeConfig,
+        Object.assign({}, nextState, { phoneCodeHash: phoneCodeHash }),
+        telegramClientFactory
+      ));
       app.clearAuthError();
       app.clearCache();
       await sendChatList();
@@ -326,6 +346,38 @@ async function handleConfigSave(state) {
   }
 
   sendSettingsState(app.getSyncState());
+}
+
+async function handleRequestLoginCode(state) {
+  var nextState = state || {};
+
+  applyConfigSettings(nextState);
+
+  if (!nextState.phoneNumber) {
+    failAuthConfiguration("Phone number is required.");
+    return;
+  }
+
+  if (!telegramRuntimeConfig || typeof telegramClientFactory !== "function") {
+    failAuthConfiguration("Telegram auth is not configured in this build.");
+    return;
+  }
+
+  app.clearAuthError();
+  app.refreshStarted();
+  sendEnvelope(MessageType.syncStatus, "", 0, SyncState.syncing);
+
+  try {
+    app.setAuthCodeRequest(await requestTelegramLoginCode(telegramRuntimeConfig, nextState, telegramClientFactory));
+    sendSettingsState(SyncState.desynced);
+    sendEnvelope(MessageType.syncStatus, "", 0, SyncState.desynced);
+  } catch (error) {
+    log("Telegram login code request failed", error);
+    app.setAuthError(getErrorMessage(error, "Telegram login code request failed."));
+    app.refreshFailed();
+    sendSettingsState(SyncState.desynced);
+    sendEnvelope(MessageType.syncStatus, "", 0, SyncState.desynced);
+  }
 }
 
 async function handleLogoutAction() {
@@ -357,6 +409,9 @@ async function handleConfigAction(actionPayload) {
   var state = actionPayload && actionPayload.state ? actionPayload.state : {};
 
   switch (action) {
+    case "auth:request-code":
+      await handleRequestLoginCode(state);
+      break;
     case "config:save":
     case "auth:save":
       await handleConfigSave(state);

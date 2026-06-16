@@ -52,6 +52,12 @@ async function loadPkjsHarness(options = {}) {
     userId: "7",
   };
   const authorizeError = options.authorizeError || null;
+  const requestCodeResult = options.requestCodeResult || {
+    phoneNumber: "+15551234567",
+    phoneCodeHash: "hash-123",
+    isCodeViaApp: true,
+  };
+  const requestCodeError = options.requestCodeError || null;
   const sentMessages = [];
   const listeners = new Map();
   const storage = createMemoryStorage();
@@ -71,6 +77,7 @@ async function loadPkjsHarness(options = {}) {
   const authModule = require(authModulePath);
   const adapterModule = require(adapterModulePath);
   const originalAuthorizeTelegramSession = authModule.authorizeTelegramSession;
+  const originalRequestTelegramLoginCode = authModule.requestTelegramLoginCode;
   const originalCreateTelegramAdapter = adapterModule.createTelegramAdapter;
   const authorizeTelegramSession = vi.fn(async () => {
     if (authorizeError) {
@@ -78,6 +85,13 @@ async function loadPkjsHarness(options = {}) {
     }
 
     return authorizeResult;
+  });
+  const requestTelegramLoginCode = vi.fn(async () => {
+    if (requestCodeError) {
+      throw requestCodeError;
+    }
+
+    return requestCodeResult;
   });
   const createTelegramAdapter = vi.fn(() => ({
     isConfigured() {
@@ -159,6 +173,7 @@ async function loadPkjsHarness(options = {}) {
   };
 
   authModule.authorizeTelegramSession = authorizeTelegramSession;
+  authModule.requestTelegramLoginCode = requestTelegramLoginCode;
   adapterModule.createTelegramAdapter = createTelegramAdapter;
 
   const module = require(indexModulePath);
@@ -169,10 +184,12 @@ async function loadPkjsHarness(options = {}) {
     sentMessages,
     storage,
     authorizeTelegramSession,
+    requestTelegramLoginCode,
     createTelegramAdapter,
     restore() {
       delete require.cache[indexModulePath];
       authModule.authorizeTelegramSession = originalAuthorizeTelegramSession;
+      authModule.requestTelegramLoginCode = originalRequestTelegramLoginCode;
       adapterModule.createTelegramAdapter = originalCreateTelegramAdapter;
 
       for (const key of envKeys) {
@@ -213,12 +230,37 @@ describe("PKJS config auth flow", () => {
     const harness = await loadPkjsHarness();
 
     try {
+      const requestCodeResponse = encodeConfigResponse("auth:request-code", {
+        phoneNumber: "+15551234567",
+        loginCode: "",
+        password: "",
+        sendMode: "auto",
+        previewChatMessage: true,
+      });
       const response = encodeConfigResponse("config:save", {
         phoneNumber: "+15551234567",
         loginCode: "12345",
         password: "secret",
         sendMode: "auto",
         previewChatMessage: true,
+      });
+
+      harness.listeners.get("webviewclosed")({ response: requestCodeResponse });
+      await flushAsyncWork();
+
+      expect(harness.requestTelegramLoginCode).toHaveBeenCalledWith(
+        expect.objectContaining({ apiId: 123456, apiHash: "env-hash", source: "env" }),
+        expect.objectContaining({
+          phoneNumber: "+15551234567",
+          sendMode: "auto",
+          previewChatMessage: true,
+        }),
+        expect.any(Function),
+      );
+      expect(JSON.parse(harness.storage.getItem("tg_pebble:auth_state"))).toMatchObject({
+        phoneNumber: "+15551234567",
+        phoneCodeHash: "hash-123",
+        codeDelivery: "app",
       });
 
       harness.listeners.get("webviewclosed")({ response });
@@ -230,6 +272,7 @@ describe("PKJS config auth flow", () => {
           phoneNumber: "+15551234567",
           loginCode: "12345",
           password: "secret",
+          phoneCodeHash: "hash-123",
           sendMode: "auto",
           previewChatMessage: true,
         }),
@@ -286,6 +329,13 @@ describe("PKJS config auth flow", () => {
     });
 
     try {
+      const requestCodeResponse = encodeConfigResponse("auth:request-code", {
+        phoneNumber: "+15551234567",
+        loginCode: "",
+        password: "",
+        sendMode: "preview",
+        previewChatMessage: false,
+      });
       const response = encodeConfigResponse("config:save", {
         phoneNumber: "+15551234567",
         loginCode: "12345",
@@ -294,12 +344,19 @@ describe("PKJS config auth flow", () => {
         previewChatMessage: false,
       });
 
+      harness.listeners.get("webviewclosed")({ response: requestCodeResponse });
+      await flushAsyncWork();
       harness.listeners.get("webviewclosed")({ response });
       await flushAsyncWork();
 
+      expect(harness.requestTelegramLoginCode).toHaveBeenCalledWith(
+        expect.objectContaining({ apiId: 888001, apiHash: "embedded-hash", source: "embedded" }),
+        expect.objectContaining({ phoneNumber: "+15551234567" }),
+        expect.any(Function),
+      );
       expect(harness.authorizeTelegramSession).toHaveBeenCalledWith(
         expect.objectContaining({ apiId: 888001, apiHash: "embedded-hash", source: "embedded" }),
-        expect.objectContaining({ phoneNumber: "+15551234567", loginCode: "12345" }),
+        expect.objectContaining({ phoneNumber: "+15551234567", loginCode: "12345", phoneCodeHash: "hash-123" }),
         expect.any(Function),
       );
       expect(JSON.parse(harness.storage.getItem("tg_pebble:session"))).toEqual({
@@ -319,6 +376,13 @@ describe("PKJS config auth flow", () => {
     });
 
     try {
+      harness.storage.setItem("tg_pebble:auth_state", JSON.stringify({
+        errorMessage: "",
+        phoneNumber: "+15551234567",
+        phoneCodeHash: "hash-123",
+        codeDelivery: "app",
+        codeRequestedAt: 1234,
+      }));
       const response = encodeConfigResponse("auth:save", {
         phoneNumber: "+15551234567",
         loginCode: "99999",
@@ -332,6 +396,10 @@ describe("PKJS config auth flow", () => {
 
       expect(JSON.parse(harness.storage.getItem("tg_pebble:auth_state"))).toEqual({
         errorMessage: "Code expired.",
+        phoneNumber: "+15551234567",
+        phoneCodeHash: "hash-123",
+        codeDelivery: "app",
+        codeRequestedAt: 1234,
       });
       expect(JSON.parse(harness.storage.getItem("tg_pebble:session"))).toEqual({
         sessionString: "",
@@ -378,6 +446,39 @@ describe("PKJS config auth flow", () => {
       });
       expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
         payload: "auto|1|0|0",
+        requestId: 0,
+        syncState: "desynced",
+      });
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("requires requesting a login code before submitting the received code", async () => {
+    const harness = await loadPkjsHarness();
+
+    try {
+      const response = encodeConfigResponse("config:save", {
+        phoneNumber: "+15551234567",
+        loginCode: "12345",
+        password: "",
+        sendMode: "preview",
+        previewChatMessage: false,
+      });
+
+      harness.listeners.get("webviewclosed")({ response });
+      await flushAsyncWork();
+
+      expect(harness.authorizeTelegramSession).not.toHaveBeenCalled();
+      expect(JSON.parse(harness.storage.getItem("tg_pebble:auth_state"))).toEqual({
+        errorMessage: "Request a Telegram login code first.",
+        phoneNumber: "",
+        phoneCodeHash: "",
+        codeDelivery: "",
+        codeRequestedAt: 0,
+      });
+      expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
+        payload: "preview|0|0|1",
         requestId: 0,
         syncState: "desynced",
       });
@@ -442,6 +543,10 @@ describe("PKJS config auth flow", () => {
       expect(harness.authorizeTelegramSession).not.toHaveBeenCalled();
       expect(JSON.parse(harness.storage.getItem("tg_pebble:auth_state"))).toEqual({
         errorMessage: "Telegram auth is not configured in this build.",
+        phoneNumber: "",
+        phoneCodeHash: "",
+        codeDelivery: "",
+        codeRequestedAt: 0,
       });
       expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
         payload: "preview|0|0|1",
