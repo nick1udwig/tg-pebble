@@ -217,6 +217,86 @@ function failAuthConfiguration(message) {
   sendEnvelope(MessageType.syncStatus, "", 0, SyncState.desynced);
 }
 
+function buildTelegramWebSocketProbeUrl(runtimeConfig) {
+  var useWSS = runtimeConfig && runtimeConfig.forceWSS === true;
+  var testSuffix = runtimeConfig && runtimeConfig.testServers === true ? "_test" : "";
+
+  return (useWSS ? "wss" : "ws") + "://vesta.web.telegram.org:" + (useWSS ? "443" : "80") + "/apiws" + testSuffix;
+}
+
+function probeTelegramWebSocket(runtimeConfig) {
+  var url;
+
+  if (typeof WebSocket !== "function") {
+    log("Telegram WebSocket probe skipped", "WebSocket is unavailable.");
+    return Promise.resolve();
+  }
+
+  if (typeof process !== "undefined" && process && process.versions && process.versions.node) {
+    log("Telegram WebSocket probe skipped", "Node.js runtime.");
+    return Promise.resolve();
+  }
+
+  url = buildTelegramWebSocketProbeUrl(runtimeConfig);
+  log("Telegram WebSocket probe started", { url: url });
+
+  return new Promise(function(resolve, reject) {
+    var socket;
+    var done = false;
+    var timeout = setTimeout(function() {
+      if (done) {
+        return;
+      }
+      done = true;
+      log("Telegram WebSocket probe timed out", { url: url });
+      try {
+        if (socket) {
+          socket.close();
+        }
+      } catch (_error) {}
+      reject(new Error("Telegram WebSocket open timed out."));
+    }, 8000);
+
+    function finish(error) {
+      if (done) {
+        return;
+      }
+      done = true;
+      clearTimeout(timeout);
+      try {
+        if (socket) {
+          socket.close();
+        }
+      } catch (_closeError) {}
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    }
+
+    try {
+      socket = new WebSocket(url);
+      socket.onopen = function() {
+        log("Telegram WebSocket probe opened", { url: url });
+        finish();
+      };
+      socket.onerror = function(error) {
+        log("Telegram WebSocket probe errored", error);
+        finish(new Error("Telegram WebSocket open failed."));
+      };
+      socket.onclose = function() {
+        if (!done) {
+          log("Telegram WebSocket probe closed before open", { url: url });
+          finish(new Error("Telegram WebSocket closed before opening."));
+        }
+      };
+    } catch (error) {
+      finish(error);
+    }
+  });
+}
+
 function sendChatItems(chats, index, onComplete, onError) {
   if (index >= chats.length) {
     onComplete();
@@ -375,6 +455,7 @@ async function handleRequestLoginCode(state) {
       forceWSS: telegramRuntimeConfig.forceWSS,
       testServers: telegramRuntimeConfig.testServers
     });
+    await probeTelegramWebSocket(telegramRuntimeConfig);
     codeRequest = await requestTelegramLoginCode(telegramRuntimeConfig, nextState, telegramClientFactory);
     log("Telegram login code request succeeded", {
       isCodeViaApp: codeRequest.isCodeViaApp === true
