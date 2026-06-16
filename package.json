@@ -70,7 +70,8 @@
     "test:emulator:relaunch": "bash scripts/test-emulator-relaunch.sh",
     "test:emulator:visual": "bash scripts/test-emulator-visual.sh",
     "build:config:docs": "node scripts/build-config-docs.mjs",
-    "build:watch:release": "npm run build:watch && node scripts/build-release-pbw.mjs"
+    "build:watch:release": "npm run build:watch && node scripts/build-release-pbw.mjs",
+    "deploy:phone": "bash scripts/build-and-install-phone.sh"
   },
   "devDependencies": {
     "@playwright/test": "^1.53.0",

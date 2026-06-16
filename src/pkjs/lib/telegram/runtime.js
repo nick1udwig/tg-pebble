@@ -94,13 +94,22 @@ if (typeof globalThis.window.Response === "undefined") {
 if (typeof globalThis.WebSocket === "function" && globalThis.WebSocket.__tgPebbleWrapped !== true) {
   (function() {
     var NativeWebSocket = globalThis.WebSocket;
+    var SOCKET_OPEN_TIMEOUT_MS = 15000;
+
+    function logWebSocket(message) {
+      try {
+        console.log("[PKJS] Telegram WebSocket " + message);
+      } catch (_error) {}
+    }
 
     function createSyntheticEvent(type) {
       return { type: type };
     }
 
     function WebSocketWrapper(url, protocols) {
-      var socket = protocols ? new NativeWebSocket(url, protocols) : new NativeWebSocket(url);
+      var socket = new NativeWebSocket(url);
+      var openTimeout;
+      var settled = false;
       var listeners = {
         open: [],
         message: [],
@@ -110,6 +119,31 @@ if (typeof globalThis.WebSocket === "function" && globalThis.WebSocket.__tgPebbl
       var pending = [];
       var openObserved = false;
       var wrapper = {};
+
+      logWebSocket("opening " + String(url));
+      if (protocols) {
+        logWebSocket("ignoring requested subprotocol " + String(protocols));
+      }
+
+      openTimeout = setTimeout(function() {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        logWebSocket("open timeout " + String(url));
+        dispatch("error", createSyntheticEvent("error"));
+        try {
+          socket.close();
+        } catch (_error) {}
+      }, SOCKET_OPEN_TIMEOUT_MS);
+
+      function markSettled() {
+        settled = true;
+        if (openTimeout) {
+          clearTimeout(openTimeout);
+          openTimeout = null;
+        }
+      }
 
       function hasListeners(kind) {
         return typeof wrapper["on" + kind] === "function" || listeners[kind].length > 0;
@@ -165,15 +199,21 @@ if (typeof globalThis.WebSocket === "function" && globalThis.WebSocket.__tgPebbl
       }
 
       socket.onopen = function(event) {
+        markSettled();
+        logWebSocket("open " + String(url));
         dispatch("open", event || createSyntheticEvent("open"));
       };
       socket.onmessage = function(event) {
         dispatch("message", event || createSyntheticEvent("message"));
       };
       socket.onerror = function(event) {
+        markSettled();
+        logWebSocket("error " + String(url));
         dispatch("error", event || createSyntheticEvent("error"));
       };
       socket.onclose = function(event) {
+        markSettled();
+        logWebSocket("close " + String(url));
         dispatch("close", event || createSyntheticEvent("close"));
       };
 

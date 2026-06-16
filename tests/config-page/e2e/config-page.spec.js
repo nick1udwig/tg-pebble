@@ -73,7 +73,7 @@ test("loads embedded state and submits config changes in one payload", async ({ 
     hasSession: true,
     accountLabel: "Test User",
     codeRequested: true,
-    codeDelivery: "",
+    codeDelivery: "app",
   });
   expect(stored.loginCode).toBeUndefined();
   expect(stored.password).toBeUndefined();

@@ -74,6 +74,21 @@ function getBridge() {
   };
 }
 
+function confirmCloseForCodeRequest() {
+  if (globalThis.PebbleConfigBridge) {
+    return true;
+  }
+
+  if (typeof globalThis.confirm !== "function") {
+    return true;
+  }
+
+  return globalThis.confirm(
+    "The settings page will close so the Pebble app can request a Telegram login code. " +
+      "After the code arrives, reopen settings and enter it.",
+  );
+}
+
 function setStatus(message, kind = "info") {
   const banner = document.querySelector("#status-banner");
   banner.textContent = message;
@@ -183,16 +198,18 @@ function bootstrap() {
       return;
     }
 
+    if (!confirmCloseForCodeRequest()) {
+      return;
+    }
+
     currentState = {
       ...currentState,
       ...nextState,
       authError: "",
-      codeRequested: true,
-      codeDelivery: "",
     };
     saveState(currentState);
-    getBridge().submit({ action: "auth:request-code", state: nextState });
     setStatus("Closing to request a Telegram login code.", "success");
+    getBridge().submit({ action: "auth:request-code", state: nextState });
   });
 
   document.querySelector("#save-login").addEventListener("click", () => {

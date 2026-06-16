@@ -350,6 +350,7 @@ async function handleConfigSave(state) {
 
 async function handleRequestLoginCode(state) {
   var nextState = state || {};
+  var codeRequest;
 
   applyConfigSettings(nextState);
 
@@ -368,7 +369,17 @@ async function handleRequestLoginCode(state) {
   sendEnvelope(MessageType.syncStatus, "", 0, SyncState.syncing);
 
   try {
-    app.setAuthCodeRequest(await requestTelegramLoginCode(telegramRuntimeConfig, nextState, telegramClientFactory));
+    log("Telegram login code request started", {
+      phoneNumberLength: String(nextState.phoneNumber || "").trim().length,
+      runtimeConfigSource: telegramRuntimeConfig.source,
+      forceWSS: telegramRuntimeConfig.forceWSS,
+      testServers: telegramRuntimeConfig.testServers
+    });
+    codeRequest = await requestTelegramLoginCode(telegramRuntimeConfig, nextState, telegramClientFactory);
+    log("Telegram login code request succeeded", {
+      isCodeViaApp: codeRequest.isCodeViaApp === true
+    });
+    app.setAuthCodeRequest(codeRequest);
     sendSettingsState(SyncState.desynced);
     sendEnvelope(MessageType.syncStatus, "", 0, SyncState.desynced);
   } catch (error) {
