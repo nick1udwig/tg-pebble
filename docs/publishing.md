@@ -10,6 +10,10 @@ The Pebble config page for published builds is intended to be served from:
 
 - `https://nick1udwig.github.io/tg-pebble/config/`
 
+The Pages root URL redirects there:
+
+- `https://nick1udwig.github.io/tg-pebble/`
+
 Generate the hosted static files from the current source config page with:
 
 ```bash
