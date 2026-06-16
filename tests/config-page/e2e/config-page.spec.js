@@ -95,6 +95,39 @@ test("requires confirmation before clear cache and logout", async ({ page }) => 
   expect(submitted).toContainEqual({ action: "auth:logout" });
 });
 
+test("submits request-code even when local storage writes fail", async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalSetItem = Storage.prototype.setItem;
+
+    Storage.prototype.setItem = function setItem(key, value) {
+      if (key === "tg_pebble:config_state") {
+        throw new Error("localStorage unavailable");
+      }
+
+      return originalSetItem.call(this, key, value);
+    };
+  });
+
+  await page.goto("/");
+
+  await page.fill("#phone-number", "+15551234567");
+  await page.click("#request-code");
+
+  await expect(page.locator("#status-banner")).toHaveText("Closing to request a Telegram login code.");
+
+  const submitted = await page.evaluate(() => window.__submitted);
+  expect(submitted).toContainEqual({
+    action: "auth:request-code",
+    state: {
+      phoneNumber: "+15551234567",
+      loginCode: "",
+      password: "",
+      sendMode: "preview",
+      previewChatMessage: false,
+    },
+  });
+});
+
 test("scrubs sensitive auth fields from bootstrap state and renders auth errors", async ({ page }) => {
   const initialState = encodeURIComponent(JSON.stringify({
     phoneNumber: "+15550002222",

@@ -15,6 +15,7 @@ describe("config page helpers", () => {
     });
 
     expect(url.startsWith("http://127.0.0.1:4173?state=")).toBe(true);
+    expect(url).toContain("&v=");
     expect(readConfigPageState(url.slice(url.indexOf("?")))).toEqual({
       phoneNumber: "+15551234567",
       sendMode: "preview",

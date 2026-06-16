@@ -615,7 +615,8 @@ if (typeof Pebble !== "undefined" && Pebble.addEventListener) {
   Pebble.addEventListener("showConfiguration", function() {
     var configUrl = buildConfigPageUrl(
       telegramRuntimeConfig && telegramRuntimeConfig.configUrl ? telegramRuntimeConfig.configUrl : "http://127.0.0.1:4173",
-      app.getConfigState()
+      app.getConfigState(),
+      Date.now()
     );
     log("showConfiguration", { configUrl: configUrl });
     Pebble.openURL(configUrl);

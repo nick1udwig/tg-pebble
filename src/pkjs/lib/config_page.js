@@ -10,11 +10,12 @@ function decodeStateValue(rawValue) {
   }
 }
 
-function buildConfigPageUrl(baseUrl, state) {
+function buildConfigPageUrl(baseUrl, state, cacheBust) {
   var separator = baseUrl.indexOf("?") >= 0 ? "&" : "?";
   var encodedState = encodeURIComponent(JSON.stringify(state || {}));
+  var encodedCacheBust = encodeURIComponent(String(cacheBust == null ? Date.now() : cacheBust));
 
-  return String(baseUrl || "") + separator + "state=" + encodedState;
+  return String(baseUrl || "") + separator + "state=" + encodedState + "&v=" + encodedCacheBust;
 }
 
 function parseConfigPageResponse(response) {

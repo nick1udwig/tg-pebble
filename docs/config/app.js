@@ -57,7 +57,9 @@ function loadState() {
 }
 
 function saveState(state) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizePersistedState(state)));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizePersistedState(state)));
+  } catch (_error) {}
 }
 
 function getBridge() {
@@ -67,8 +69,20 @@ function getBridge() {
 
   return {
     submit(payload) {
+      const closeUrl = "pebblejs://close#" + encodeURIComponent(JSON.stringify(payload));
+
       try {
-        globalThis.location.href = "pebblejs://close#" + encodeURIComponent(JSON.stringify(payload));
+        globalThis.location.href = closeUrl;
+      } catch (_error) {}
+
+      try {
+        globalThis.location = closeUrl;
+      } catch (_error) {}
+
+      try {
+        if (globalThis.document) {
+          globalThis.document.location = closeUrl;
+        }
       } catch (_error) {}
     },
   };
