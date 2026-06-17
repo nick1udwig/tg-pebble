@@ -118,6 +118,16 @@ function readTelegramWebDcFromClient(client, runtimeConfig) {
   };
 }
 
+function readTelegramSessionString(client) {
+  try {
+    if (client && client.session && typeof client.session.save === "function") {
+      return String(client.session.save() || "");
+    }
+  } catch (_error) {}
+
+  return "";
+}
+
 async function requestTelegramLoginCode(runtimeConfig, authState, clientFactory) {
   var nextAuthState = authState || {};
   var phoneNumber = String(nextAuthState.phoneNumber || "").trim();
@@ -143,7 +153,8 @@ async function requestTelegramLoginCode(runtimeConfig, authState, clientFactory)
     return Object.assign({
       phoneNumber: phoneNumber,
       phoneCodeHash: sendCodeResult.phoneCodeHash,
-      isCodeViaApp: sendCodeResult.isCodeViaApp === true
+      isCodeViaApp: sendCodeResult.isCodeViaApp === true,
+      authSessionString: readTelegramSessionString(client)
     }, readTelegramWebDcFromClient(client, runtimeConfig));
   } finally {
     if (client && typeof client.disconnect === "function") {

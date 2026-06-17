@@ -60,6 +60,7 @@ async function loadPkjsHarness(options = {}) {
     telegramWebDcHost: "pluto.web.telegram.org",
     telegramWebDcPort: 443,
     forceWSS: true,
+    authSessionString: "temp-auth-session",
   };
   const requestCodeError = options.requestCodeError || null;
   const sentMessages = [];
@@ -269,6 +270,7 @@ describe("PKJS config auth flow", () => {
         telegramWebDcHost: "pluto.web.telegram.org",
         telegramWebDcPort: 443,
         forceWSS: true,
+        authSessionString: "temp-auth-session",
       });
 
       harness.listeners.get("webviewclosed")({ response });
@@ -420,6 +422,7 @@ describe("PKJS config auth flow", () => {
         telegramWebDcHost: "",
         telegramWebDcPort: 0,
         forceWSS: false,
+        authSessionString: "",
       });
       expect(JSON.parse(harness.storage.getItem("tg_pebble:session"))).toEqual({
         sessionString: "",
@@ -500,6 +503,7 @@ describe("PKJS config auth flow", () => {
         telegramWebDcHost: "",
         telegramWebDcPort: 0,
         forceWSS: false,
+        authSessionString: "",
       });
       expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
         payload: "preview|0|0|1",
@@ -575,6 +579,7 @@ describe("PKJS config auth flow", () => {
         telegramWebDcHost: "",
         telegramWebDcPort: 0,
         forceWSS: false,
+        authSessionString: "",
       });
       expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
         payload: "preview|0|0|1",

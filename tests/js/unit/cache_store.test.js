@@ -44,6 +44,7 @@ describe("createCacheStore", () => {
       telegramWebDcHost: " pluto.web.telegram.org ",
       telegramWebDcPort: "443",
       forceWSS: true,
+      authSessionString: "temp-auth-session",
     });
 
     expect(store.getAuthState()).toEqual({
@@ -56,6 +57,7 @@ describe("createCacheStore", () => {
       telegramWebDcHost: "pluto.web.telegram.org",
       telegramWebDcPort: 443,
       forceWSS: true,
+      authSessionString: "temp-auth-session",
     });
   });
 

@@ -80,6 +80,7 @@ describe("createPkjsApp", () => {
       telegramWebDcHost: "pluto.web.telegram.org",
       telegramWebDcPort: 443,
       forceWSS: true,
+      authSessionString: "temp-auth-session",
     });
 
     expect(app.getPendingAuthCodeHash("+15551234567")).toBe("hash-123");
@@ -90,6 +91,7 @@ describe("createPkjsApp", () => {
       telegramWebDcHost: "pluto.web.telegram.org",
       telegramWebDcPort: 443,
       forceWSS: true,
+      authSessionString: "temp-auth-session",
     });
     expect(app.getConfigState()).toMatchObject({
       phoneNumber: "+15551234567",

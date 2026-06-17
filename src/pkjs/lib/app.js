@@ -339,7 +339,8 @@ function createPkjsApp(options) {
         telegramWebDcId: request.telegramWebDcId,
         telegramWebDcHost: request.telegramWebDcHost,
         telegramWebDcPort: request.telegramWebDcPort,
-        forceWSS: request.forceWSS === true
+        forceWSS: request.forceWSS === true,
+        authSessionString: request.authSessionString
       });
     },
     getAuthState: function() {

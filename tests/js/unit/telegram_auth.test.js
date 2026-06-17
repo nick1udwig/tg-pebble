@@ -96,6 +96,7 @@ describe("telegram auth helpers", () => {
       phoneNumber: "+15551234567",
       phoneCodeHash: "hash-123",
       isCodeViaApp: true,
+      authSessionString: "",
     });
 
     expect(client.connect).toHaveBeenCalledTimes(1);
@@ -110,6 +111,7 @@ describe("telegram auth helpers", () => {
         dcId: 1,
         serverAddress: "pluto.web.telegram.org",
         port: 443,
+        save: () => "temp-auth-session",
       },
       sendCode: vi.fn(async () => ({
         phoneCodeHash: "hash-123",
@@ -128,6 +130,7 @@ describe("telegram auth helpers", () => {
       telegramWebDcHost: "pluto.web.telegram.org",
       telegramWebDcPort: 443,
       forceWSS: true,
+      authSessionString: "temp-auth-session",
     });
   });
 

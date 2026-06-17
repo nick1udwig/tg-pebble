@@ -28,7 +28,8 @@ var DEFAULT_AUTH_STATE = Object.freeze({
   telegramWebDcId: 0,
   telegramWebDcHost: "",
   telegramWebDcPort: 0,
-  forceWSS: false
+  forceWSS: false,
+  authSessionString: ""
 });
 
 var MAX_CACHED_MESSAGES_PER_CHAT = 4;
@@ -87,7 +88,8 @@ function normalizeAuthState(authState) {
     telegramWebDcId: Number.isFinite(telegramWebDcId) && telegramWebDcId > 0 ? telegramWebDcId : 0,
     telegramWebDcHost: String(authState && authState.telegramWebDcHost ? authState.telegramWebDcHost : "").trim(),
     telegramWebDcPort: Number.isFinite(telegramWebDcPort) && telegramWebDcPort > 0 ? telegramWebDcPort : 0,
-    forceWSS: authState && authState.forceWSS === true
+    forceWSS: authState && authState.forceWSS === true,
+    authSessionString: String(authState && authState.authSessionString ? authState.authSessionString : "")
   };
 }
 

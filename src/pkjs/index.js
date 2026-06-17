@@ -122,13 +122,16 @@ function getErrorMessage(error, fallback) {
   return String(fallback || "Unknown error.");
 }
 
-function createTelegramClientFactory(config) {
+function createTelegramClientFactory(config, defaultSessionString) {
   if (!config) {
     return null;
   }
 
   return function(session) {
     var sessionValue = typeof session === "string" ? session : (session && session.sessionString) || "";
+    if (!sessionValue && defaultSessionString) {
+      sessionValue = String(defaultSessionString || "");
+    }
     return createTelegramClient(config, sessionValue);
   };
 }
@@ -992,7 +995,11 @@ async function handleConfigSave(state) {
 
     try {
       resolvedRuntimeConfig = await resolveTelegramRuntimeConfigForAuthRequest(telegramRuntimeConfig, pendingAuthRequest);
-      resolvedTelegramClientFactory = applyTelegramRuntimeConfig(resolvedRuntimeConfig);
+      resolvedTelegramClientFactory = createTelegramClientFactory(
+        resolvedRuntimeConfig,
+        pendingAuthRequest.authSessionString
+      );
+      applyTelegramRuntimeConfig(resolvedRuntimeConfig);
       app.setSession(await authorizeTelegramSession(
         resolvedRuntimeConfig,
         Object.assign({}, nextState, { phoneCodeHash: pendingAuthRequest.phoneCodeHash }),
