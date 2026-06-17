@@ -248,8 +248,35 @@ function failAuthConfiguration(message) {
   sendEnvelope(MessageType.syncStatus, "", 0, SyncState.desynced);
 }
 
-var MINIMAL_WEBSOCKET_EXPERIMENT_URL = "wss://ws.postman-echo.com/raw";
-var MINIMAL_WEBSOCKET_EXPERIMENT_TIMEOUT_MS = 60000;
+var WEBSOCKET_EXPERIMENT_CASES = [
+  {
+    label: "postman-wss-echo",
+    url: "wss://ws.postman-echo.com/raw",
+    sendMode: "echo",
+    timeoutMs: 15000
+  },
+  {
+    label: "telegram-dc2-wss-binary",
+    url: "wss://venus.web.telegram.org:443/apiws",
+    protocols: "binary",
+    sendMode: "open-only",
+    timeoutMs: 30000
+  },
+  {
+    label: "telegram-dc2-ws-binary",
+    url: "ws://venus.web.telegram.org:80/apiws",
+    protocols: "binary",
+    sendMode: "open-only",
+    timeoutMs: 30000
+  },
+  {
+    label: "telegram-dc4-wss-binary",
+    url: "wss://vesta.web.telegram.org:443/apiws",
+    protocols: "binary",
+    sendMode: "open-only",
+    timeoutMs: 30000
+  }
+];
 
 function isNodeRuntime() {
   return typeof process !== "undefined" && process && process.versions && process.versions.node;
@@ -316,10 +343,11 @@ function addSocketState(detail, socket) {
   return detail;
 }
 
-function runMinimalWebSocketExperiment(trigger) {
+function runWebSocketExperimentCase(testCase, trigger, index, total) {
   if (typeof WebSocket !== "function") {
-    log("Minimal WebSocket experiment skipped", {
+    log("WebSocket experiment case skipped", {
       trigger: trigger,
+      label: testCase.label,
       reason: "WebSocket is unavailable"
     });
     return Promise.resolve({ result: "skipped" });
@@ -329,7 +357,7 @@ function runMinimalWebSocketExperiment(trigger) {
     var socket = null;
     var done = false;
     var opened = false;
-    var message = "tg-pebble-ws-probe-" + String(Date.now());
+    var message = "tg-pebble-ws-probe-" + testCase.label + "-" + String(Date.now());
     var timeout;
 
     function finish(result, detail) {
@@ -343,9 +371,13 @@ function runMinimalWebSocketExperiment(trigger) {
       clearTimeout(timeout);
       nextDetail.result = result;
       nextDetail.trigger = trigger;
-      nextDetail.url = MINIMAL_WEBSOCKET_EXPERIMENT_URL;
+      nextDetail.label = testCase.label;
+      nextDetail.index = index;
+      nextDetail.total = total;
+      nextDetail.url = testCase.url;
+      nextDetail.protocols = String(testCase.protocols || "");
       addSocketState(nextDetail, socket);
-      log("Minimal WebSocket experiment finished", nextDetail);
+      log("WebSocket experiment case finished", nextDetail);
 
       if (opened && socket && String(socket.readyState) === String(WebSocket.OPEN)) {
         try {
@@ -356,17 +388,29 @@ function runMinimalWebSocketExperiment(trigger) {
       resolve({ result: result, detail: nextDetail });
     }
 
-    log("Minimal WebSocket experiment started", {
+    log("WebSocket experiment case started", {
       trigger: trigger,
-      url: MINIMAL_WEBSOCKET_EXPERIMENT_URL,
+      label: testCase.label,
+      index: index,
+      total: total,
+      url: testCase.url,
+      protocols: String(testCase.protocols || ""),
+      sendMode: testCase.sendMode,
       webSocketWrapped: WebSocket.__tgPebbleWrapped === true,
-      timeoutMs: MINIMAL_WEBSOCKET_EXPERIMENT_TIMEOUT_MS
+      timeoutMs: testCase.timeoutMs
     });
 
     try {
-      socket = new WebSocket(MINIMAL_WEBSOCKET_EXPERIMENT_URL);
-      log("Minimal WebSocket experiment constructed", addSocketState({
-        url: MINIMAL_WEBSOCKET_EXPERIMENT_URL
+      socket = testCase.protocols
+        ? new WebSocket(testCase.url, testCase.protocols)
+        : new WebSocket(testCase.url);
+      try {
+        socket.binaryType = "arraybuffer";
+      } catch (_binaryTypeError) {}
+      log("WebSocket experiment case constructed", addSocketState({
+        label: testCase.label,
+        url: testCase.url,
+        protocols: String(testCase.protocols || "")
       }, socket));
     } catch (error) {
       finish("threw", {
@@ -377,14 +421,21 @@ function runMinimalWebSocketExperiment(trigger) {
 
     timeout = setTimeout(function() {
       finish("timeout", {});
-    }, MINIMAL_WEBSOCKET_EXPERIMENT_TIMEOUT_MS);
+    }, testCase.timeoutMs);
 
     socket.onopen = function(event) {
       opened = true;
-      log("Minimal WebSocket experiment opened", addSocketState(describeWebSocketEvent(event), socket));
+      log("WebSocket experiment case opened", addSocketState(Object.assign(describeWebSocketEvent(event), {
+        label: testCase.label
+      }), socket));
+      if (testCase.sendMode !== "echo") {
+        finish("open", describeWebSocketEvent(event));
+        return;
+      }
       try {
         socket.send(message);
-        log("Minimal WebSocket experiment sent", {
+        log("WebSocket experiment case sent", {
+          label: testCase.label,
           messageLength: message.length,
           messagePreview: message
         });
@@ -398,7 +449,8 @@ function runMinimalWebSocketExperiment(trigger) {
     socket.onmessage = function(event) {
       var detail = describeWebSocketEvent(event);
       detail.echoMatched = event && event.data === message;
-      log("Minimal WebSocket experiment message", addSocketState(detail, socket));
+      detail.label = testCase.label;
+      log("WebSocket experiment case message", addSocketState(detail, socket));
       finish("message", detail);
     };
 
@@ -410,13 +462,47 @@ function runMinimalWebSocketExperiment(trigger) {
       var detail = describeWebSocketEvent(event);
 
       if (done) {
-        log("Minimal WebSocket experiment closed after finish", addSocketState(detail, socket));
+        detail.label = testCase.label;
+        log("WebSocket experiment case closed after finish", addSocketState(detail, socket));
         return;
       }
 
       finish("close", detail);
     };
   });
+}
+
+async function runMinimalWebSocketExperiment(trigger) {
+  var results = [];
+  var index;
+  var result;
+  var summary = [];
+
+  log("WebSocket experiment suite started", {
+    trigger: trigger,
+    caseCount: WEBSOCKET_EXPERIMENT_CASES.length
+  });
+
+  for (index = 0; index < WEBSOCKET_EXPERIMENT_CASES.length; index += 1) {
+    result = await runWebSocketExperimentCase(
+      WEBSOCKET_EXPERIMENT_CASES[index],
+      trigger,
+      index + 1,
+      WEBSOCKET_EXPERIMENT_CASES.length
+    );
+    results.push(result);
+    summary.push(WEBSOCKET_EXPERIMENT_CASES[index].label + ":" + result.result);
+  }
+
+  log("WebSocket experiment suite finished", {
+    trigger: trigger,
+    summary: summary.join(",")
+  });
+
+  return {
+    result: summary.join(","),
+    results: results
+  };
 }
 
 var TELEGRAM_WEB_DCS = [
