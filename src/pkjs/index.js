@@ -248,6 +248,13 @@ function failAuthConfiguration(message) {
   sendEnvelope(MessageType.syncStatus, "", 0, SyncState.desynced);
 }
 
+var DIRECT_TELEGRAM_WEB_DC = {
+  dcId: 2,
+  host: "venus.web.telegram.org",
+  port: 443,
+  useWSS: true
+};
+
 var WEBSOCKET_EXPERIMENT_CASES = [
   {
     label: "postman-wss-echo",
@@ -815,18 +822,26 @@ function startWebSocketControlProbe(endpoint) {
 }
 
 async function resolveTelegramRuntimeConfigForConnect(runtimeConfig) {
-  var resolvedRuntimeConfig = await probeTelegramWebSocket(runtimeConfig);
+  var resolvedRuntimeConfig = cloneRuntimeConfigWithTelegramWebDc(runtimeConfig, DIRECT_TELEGRAM_WEB_DC);
 
   if (resolvedRuntimeConfig && resolvedRuntimeConfig.telegramWebDcHost) {
     log("Telegram runtime endpoint selected", {
       dcId: resolvedRuntimeConfig.telegramWebDcId,
       host: resolvedRuntimeConfig.telegramWebDcHost,
       port: resolvedRuntimeConfig.telegramWebDcPort,
-      forceWSS: resolvedRuntimeConfig.forceWSS === true
+      forceWSS: resolvedRuntimeConfig.forceWSS === true,
+      direct: true,
+      webSocketWrapped: typeof WebSocket === "function" && WebSocket.__tgPebbleWrapped === true
     });
   }
 
   return resolvedRuntimeConfig;
+}
+
+function applyTelegramRuntimeConfig(runtimeConfig) {
+  telegramRuntimeConfig = runtimeConfig;
+  telegramClientFactory = createTelegramClientFactory(telegramRuntimeConfig);
+  return telegramClientFactory;
 }
 
 function sendChatItems(chats, index, onComplete, onError) {
@@ -942,7 +957,7 @@ async function handleConfigSave(state) {
 
     try {
       resolvedRuntimeConfig = await resolveTelegramRuntimeConfigForConnect(telegramRuntimeConfig);
-      resolvedTelegramClientFactory = createTelegramClientFactory(resolvedRuntimeConfig);
+      resolvedTelegramClientFactory = applyTelegramRuntimeConfig(resolvedRuntimeConfig);
       app.setSession(await authorizeTelegramSession(
         resolvedRuntimeConfig,
         Object.assign({}, nextState, { phoneCodeHash: phoneCodeHash }),
@@ -969,7 +984,6 @@ async function handleRequestLoginCode(state) {
   var codeRequest;
   var resolvedRuntimeConfig;
   var resolvedTelegramClientFactory;
-  var experimentResult;
 
   applyConfigSettings(nextState);
 
@@ -994,12 +1008,8 @@ async function handleRequestLoginCode(state) {
       forceWSS: telegramRuntimeConfig.forceWSS,
       testServers: telegramRuntimeConfig.testServers
     });
-    if (shouldRunMinimalWebSocketExperiment()) {
-      experimentResult = await runMinimalWebSocketExperiment("request-code");
-      throw new Error("Minimal WebSocket experiment result: " + experimentResult.result);
-    }
     resolvedRuntimeConfig = await resolveTelegramRuntimeConfigForConnect(telegramRuntimeConfig);
-    resolvedTelegramClientFactory = createTelegramClientFactory(resolvedRuntimeConfig);
+    resolvedTelegramClientFactory = applyTelegramRuntimeConfig(resolvedRuntimeConfig);
     codeRequest = await requestTelegramLoginCode(resolvedRuntimeConfig, nextState, resolvedTelegramClientFactory);
     log("Telegram login code request succeeded", {
       isCodeViaApp: codeRequest.isCodeViaApp === true

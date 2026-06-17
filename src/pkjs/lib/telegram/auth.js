@@ -16,8 +16,8 @@ function buildTelegramClientParams(runtimeConfig) {
     connectionRetries: runtimeConfig.connectionRetries == null ? 3 : runtimeConfig.connectionRetries,
     requestRetries: runtimeConfig.requestRetries == null ? 3 : runtimeConfig.requestRetries,
     reconnectRetries: runtimeConfig.reconnectRetries == null ? 0 : runtimeConfig.reconnectRetries,
-    // The bundled PKJS runtime can complete plain WebSocket MTProto today.
-    // WSS still fails in this environment, so only allow it when explicitly forced.
+    // Core Devices iOS can open Telegram's web endpoint directly over WSS.
+    // Keep it explicit so tests and local fixtures can still choose the old path.
     useWSS: runtimeConfig.forceWSS === true,
     testServers: runtimeConfig.testServers === true,
     deviceModel: String(runtimeConfig.deviceModel || "TG Pebble"),

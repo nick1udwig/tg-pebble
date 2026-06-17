@@ -91,7 +91,9 @@ if (typeof globalThis.window.Response === "undefined") {
   globalThis.window.Response = globalThis.Response;
 }
 
-if (typeof globalThis.WebSocket === "function" && globalThis.WebSocket.__tgPebbleWrapped !== true) {
+var enableTelegramWebSocketWrapper = globalThis.__TG_PEBBLE_ENABLE_WEBSOCKET_WRAPPER__ === true;
+
+if (enableTelegramWebSocketWrapper && typeof globalThis.WebSocket === "function" && globalThis.WebSocket.__tgPebbleWrapped !== true) {
   (function() {
     var NativeWebSocket = globalThis.WebSocket;
     var SOCKET_OPEN_TIMEOUT_MS = 15000;
