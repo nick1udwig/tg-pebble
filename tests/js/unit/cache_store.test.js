@@ -40,6 +40,10 @@ describe("createCacheStore", () => {
       phoneCodeHash: "hash-123",
       codeDelivery: "app",
       codeRequestedAt: 1234,
+      telegramWebDcId: "1",
+      telegramWebDcHost: " pluto.web.telegram.org ",
+      telegramWebDcPort: "443",
+      forceWSS: true,
     });
 
     expect(store.getAuthState()).toEqual({
@@ -48,6 +52,10 @@ describe("createCacheStore", () => {
       phoneCodeHash: "hash-123",
       codeDelivery: "app",
       codeRequestedAt: 1234,
+      telegramWebDcId: 1,
+      telegramWebDcHost: "pluto.web.telegram.org",
+      telegramWebDcPort: 443,
+      forceWSS: true,
     });
   });
 

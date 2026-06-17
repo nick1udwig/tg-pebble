@@ -335,22 +335,31 @@ function createPkjsApp(options) {
         phoneNumber: String(request.phoneNumber || "").trim(),
         phoneCodeHash: String(request.phoneCodeHash || ""),
         codeDelivery: request.isCodeViaApp === true ? "app" : "sms",
-        codeRequestedAt: Date.now()
+        codeRequestedAt: Date.now(),
+        telegramWebDcId: request.telegramWebDcId,
+        telegramWebDcHost: request.telegramWebDcHost,
+        telegramWebDcPort: request.telegramWebDcPort,
+        forceWSS: request.forceWSS === true
       });
     },
     getAuthState: function() {
       return cache.getAuthState();
     },
-    getPendingAuthCodeHash: function(phoneNumber) {
+    getPendingAuthRequest: function(phoneNumber) {
       var authState = cache.getAuthState();
       var requestedPhoneNumber = String(authState.phoneNumber || "").trim();
       var nextPhoneNumber = String(phoneNumber || "").trim();
 
       if (!authState.phoneCodeHash || requestedPhoneNumber !== nextPhoneNumber) {
-        return "";
+        return null;
       }
 
-      return String(authState.phoneCodeHash || "");
+      return Object.assign({}, authState);
+    },
+    getPendingAuthCodeHash: function(phoneNumber) {
+      var authState = this.getPendingAuthRequest(phoneNumber);
+
+      return authState ? String(authState.phoneCodeHash || "") : "";
     },
     clearAuthError: function() {
       cache.clearAuthState();

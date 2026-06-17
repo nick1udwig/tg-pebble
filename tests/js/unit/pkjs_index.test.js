@@ -56,6 +56,10 @@ async function loadPkjsHarness(options = {}) {
     phoneNumber: "+15551234567",
     phoneCodeHash: "hash-123",
     isCodeViaApp: true,
+    telegramWebDcId: 1,
+    telegramWebDcHost: "pluto.web.telegram.org",
+    telegramWebDcPort: 443,
+    forceWSS: true,
   };
   const requestCodeError = options.requestCodeError || null;
   const sentMessages = [];
@@ -261,13 +265,25 @@ describe("PKJS config auth flow", () => {
         phoneNumber: "+15551234567",
         phoneCodeHash: "hash-123",
         codeDelivery: "app",
+        telegramWebDcId: 1,
+        telegramWebDcHost: "pluto.web.telegram.org",
+        telegramWebDcPort: 443,
+        forceWSS: true,
       });
 
       harness.listeners.get("webviewclosed")({ response });
       await flushAsyncWork();
 
       expect(harness.authorizeTelegramSession).toHaveBeenCalledWith(
-        expect.objectContaining({ apiId: 123456, apiHash: "env-hash", source: "env" }),
+        expect.objectContaining({
+          apiId: 123456,
+          apiHash: "env-hash",
+          source: "env",
+          telegramWebDcId: 1,
+          telegramWebDcHost: "pluto.web.telegram.org",
+          telegramWebDcPort: 443,
+          forceWSS: true,
+        }),
         expect.objectContaining({
           phoneNumber: "+15551234567",
           loginCode: "12345",
@@ -400,6 +416,10 @@ describe("PKJS config auth flow", () => {
         phoneCodeHash: "hash-123",
         codeDelivery: "app",
         codeRequestedAt: 1234,
+        telegramWebDcId: 0,
+        telegramWebDcHost: "",
+        telegramWebDcPort: 0,
+        forceWSS: false,
       });
       expect(JSON.parse(harness.storage.getItem("tg_pebble:session"))).toEqual({
         sessionString: "",
@@ -476,6 +496,10 @@ describe("PKJS config auth flow", () => {
         phoneCodeHash: "",
         codeDelivery: "",
         codeRequestedAt: 0,
+        telegramWebDcId: 0,
+        telegramWebDcHost: "",
+        telegramWebDcPort: 0,
+        forceWSS: false,
       });
       expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
         payload: "preview|0|0|1",
@@ -547,6 +571,10 @@ describe("PKJS config auth flow", () => {
         phoneCodeHash: "",
         codeDelivery: "",
         codeRequestedAt: 0,
+        telegramWebDcId: 0,
+        telegramWebDcHost: "",
+        telegramWebDcPort: 0,
+        forceWSS: false,
       });
       expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
         payload: "preview|0|0|1",

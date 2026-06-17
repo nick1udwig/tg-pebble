@@ -103,6 +103,34 @@ describe("telegram auth helpers", () => {
     expect(disconnect).toHaveBeenCalledTimes(1);
   });
 
+  it("returns the active web DC after login-code migration", async () => {
+    const client = {
+      connected: true,
+      session: {
+        dcId: 1,
+        serverAddress: "pluto.web.telegram.org",
+        port: 443,
+      },
+      sendCode: vi.fn(async () => ({
+        phoneCodeHash: "hash-123",
+        isCodeViaApp: true,
+      })),
+      disconnect: vi.fn(async () => {}),
+    };
+
+    await expect(requestTelegramLoginCode(
+      { apiId: 123456, apiHash: "hash", forceWSS: true, testServers: false },
+      { phoneNumber: "+15551234567" },
+      () => client,
+    )).resolves.toMatchObject({
+      phoneCodeHash: "hash-123",
+      telegramWebDcId: 1,
+      telegramWebDcHost: "pluto.web.telegram.org",
+      telegramWebDcPort: 443,
+      forceWSS: true,
+    });
+  });
+
   it("requires a login code before creating a Telegram client", async () => {
     const clientFactory = vi.fn(() => {
       throw new Error("Should not create client");

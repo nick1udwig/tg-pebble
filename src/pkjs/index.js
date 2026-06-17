@@ -544,6 +544,23 @@ function cloneRuntimeConfigWithTelegramWebDc(runtimeConfig, candidate) {
   return next;
 }
 
+function buildTelegramWebDcCandidateFromAuthRequest(authRequest) {
+  var dcId = Number(authRequest && authRequest.telegramWebDcId);
+  var host = String(authRequest && authRequest.telegramWebDcHost ? authRequest.telegramWebDcHost : "").trim();
+  var port = Number(authRequest && authRequest.telegramWebDcPort);
+
+  if (!Number.isFinite(dcId) || dcId <= 0 || !host || !Number.isFinite(port) || port <= 0) {
+    return null;
+  }
+
+  return {
+    dcId: dcId,
+    host: host,
+    port: port,
+    useWSS: authRequest.forceWSS === true || port === 443
+  };
+}
+
 function buildTelegramWebSocketProbeUrl(candidate, runtimeConfig) {
   var testSuffix = runtimeConfig && runtimeConfig.testServers === true ? "_test" : "";
   var scheme = candidate.useWSS === true ? "wss" : "ws";
@@ -838,6 +855,24 @@ async function resolveTelegramRuntimeConfigForConnect(runtimeConfig) {
   return resolvedRuntimeConfig;
 }
 
+async function resolveTelegramRuntimeConfigForAuthRequest(runtimeConfig, authRequest) {
+  var candidate = buildTelegramWebDcCandidateFromAuthRequest(authRequest);
+  var resolvedRuntimeConfig;
+
+  if (!candidate) {
+    return resolveTelegramRuntimeConfigForConnect(runtimeConfig);
+  }
+
+  resolvedRuntimeConfig = cloneRuntimeConfigWithTelegramWebDc(runtimeConfig, candidate);
+  log("Telegram auth endpoint restored", {
+    dcId: resolvedRuntimeConfig.telegramWebDcId,
+    host: resolvedRuntimeConfig.telegramWebDcHost,
+    port: resolvedRuntimeConfig.telegramWebDcPort,
+    forceWSS: resolvedRuntimeConfig.forceWSS === true
+  });
+  return resolvedRuntimeConfig;
+}
+
 function applyTelegramRuntimeConfig(runtimeConfig) {
   telegramRuntimeConfig = runtimeConfig;
   telegramClientFactory = createTelegramClientFactory(telegramRuntimeConfig);
@@ -934,7 +969,7 @@ async function sendChatPage(chatId) {
 
 async function handleConfigSave(state) {
   var nextState = state || {};
-  var phoneCodeHash;
+  var pendingAuthRequest;
   var resolvedRuntimeConfig;
   var resolvedTelegramClientFactory;
 
@@ -946,8 +981,8 @@ async function handleConfigSave(state) {
       return;
     }
 
-    phoneCodeHash = app.getPendingAuthCodeHash(nextState.phoneNumber);
-    if (!phoneCodeHash) {
+    pendingAuthRequest = app.getPendingAuthRequest(nextState.phoneNumber);
+    if (!pendingAuthRequest || !pendingAuthRequest.phoneCodeHash) {
       failAuthConfiguration("Request a Telegram login code first.");
       return;
     }
@@ -956,11 +991,11 @@ async function handleConfigSave(state) {
     sendEnvelope(MessageType.syncStatus, "", 0, SyncState.syncing);
 
     try {
-      resolvedRuntimeConfig = await resolveTelegramRuntimeConfigForConnect(telegramRuntimeConfig);
+      resolvedRuntimeConfig = await resolveTelegramRuntimeConfigForAuthRequest(telegramRuntimeConfig, pendingAuthRequest);
       resolvedTelegramClientFactory = applyTelegramRuntimeConfig(resolvedRuntimeConfig);
       app.setSession(await authorizeTelegramSession(
         resolvedRuntimeConfig,
-        Object.assign({}, nextState, { phoneCodeHash: phoneCodeHash }),
+        Object.assign({}, nextState, { phoneCodeHash: pendingAuthRequest.phoneCodeHash }),
         resolvedTelegramClientFactory
       ));
       app.clearAuthError();
@@ -1011,8 +1046,13 @@ async function handleRequestLoginCode(state) {
     resolvedRuntimeConfig = await resolveTelegramRuntimeConfigForConnect(telegramRuntimeConfig);
     resolvedTelegramClientFactory = applyTelegramRuntimeConfig(resolvedRuntimeConfig);
     codeRequest = await requestTelegramLoginCode(resolvedRuntimeConfig, nextState, resolvedTelegramClientFactory);
+    resolvedRuntimeConfig = await resolveTelegramRuntimeConfigForAuthRequest(resolvedRuntimeConfig, codeRequest);
+    applyTelegramRuntimeConfig(resolvedRuntimeConfig);
     log("Telegram login code request succeeded", {
-      isCodeViaApp: codeRequest.isCodeViaApp === true
+      isCodeViaApp: codeRequest.isCodeViaApp === true,
+      dcId: codeRequest.telegramWebDcId || "",
+      host: codeRequest.telegramWebDcHost || "",
+      port: codeRequest.telegramWebDcPort || ""
     });
     app.setAuthCodeRequest(codeRequest);
     sendSettingsState(SyncState.desynced);

@@ -24,7 +24,11 @@ var DEFAULT_AUTH_STATE = Object.freeze({
   phoneNumber: "",
   phoneCodeHash: "",
   codeDelivery: "",
-  codeRequestedAt: 0
+  codeRequestedAt: 0,
+  telegramWebDcId: 0,
+  telegramWebDcHost: "",
+  telegramWebDcPort: 0,
+  forceWSS: false
 });
 
 var MAX_CACHED_MESSAGES_PER_CHAT = 4;
@@ -69,6 +73,8 @@ function mergeSettings(settings) {
 
 function normalizeAuthState(authState) {
   var codeRequestedAt = Number(authState && authState.codeRequestedAt);
+  var telegramWebDcId = Number(authState && authState.telegramWebDcId);
+  var telegramWebDcPort = Number(authState && authState.telegramWebDcPort);
 
   return {
     errorMessage: String(authState && authState.errorMessage ? authState.errorMessage : ""),
@@ -77,7 +83,11 @@ function normalizeAuthState(authState) {
     codeDelivery: authState && authState.codeDelivery === "app" ? "app" : (
       authState && authState.codeDelivery === "sms" ? "sms" : ""
     ),
-    codeRequestedAt: Number.isFinite(codeRequestedAt) && codeRequestedAt > 0 ? codeRequestedAt : 0
+    codeRequestedAt: Number.isFinite(codeRequestedAt) && codeRequestedAt > 0 ? codeRequestedAt : 0,
+    telegramWebDcId: Number.isFinite(telegramWebDcId) && telegramWebDcId > 0 ? telegramWebDcId : 0,
+    telegramWebDcHost: String(authState && authState.telegramWebDcHost ? authState.telegramWebDcHost : "").trim(),
+    telegramWebDcPort: Number.isFinite(telegramWebDcPort) && telegramWebDcPort > 0 ? telegramWebDcPort : 0,
+    forceWSS: authState && authState.forceWSS === true
   };
 }
 

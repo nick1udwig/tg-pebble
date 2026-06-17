@@ -76,9 +76,21 @@ describe("createPkjsApp", () => {
       phoneNumber: "+15551234567",
       phoneCodeHash: "hash-123",
       isCodeViaApp: true,
+      telegramWebDcId: 1,
+      telegramWebDcHost: "pluto.web.telegram.org",
+      telegramWebDcPort: 443,
+      forceWSS: true,
     });
 
     expect(app.getPendingAuthCodeHash("+15551234567")).toBe("hash-123");
+    expect(app.getPendingAuthRequest("+15551234567")).toMatchObject({
+      phoneNumber: "+15551234567",
+      phoneCodeHash: "hash-123",
+      telegramWebDcId: 1,
+      telegramWebDcHost: "pluto.web.telegram.org",
+      telegramWebDcPort: 443,
+      forceWSS: true,
+    });
     expect(app.getConfigState()).toMatchObject({
       phoneNumber: "+15551234567",
       codeRequested: true,

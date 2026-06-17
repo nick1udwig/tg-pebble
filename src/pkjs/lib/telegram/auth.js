@@ -100,6 +100,24 @@ function formatAccountLabel(me) {
   return String(me.id || "");
 }
 
+function readTelegramWebDcFromClient(client, runtimeConfig) {
+  var session = client && client.session;
+  var dcId = Number(session && session.dcId);
+  var host = String(session && session.serverAddress ? session.serverAddress : "").trim();
+  var port = Number(session && session.port);
+
+  if (!Number.isFinite(dcId) || dcId <= 0 || !host || !Number.isFinite(port) || port <= 0) {
+    return {};
+  }
+
+  return {
+    telegramWebDcId: dcId,
+    telegramWebDcHost: host,
+    telegramWebDcPort: port,
+    forceWSS: runtimeConfig && runtimeConfig.forceWSS === true
+  };
+}
+
 async function requestTelegramLoginCode(runtimeConfig, authState, clientFactory) {
   var nextAuthState = authState || {};
   var phoneNumber = String(nextAuthState.phoneNumber || "").trim();
@@ -122,11 +140,11 @@ async function requestTelegramLoginCode(runtimeConfig, authState, clientFactory)
       throw new Error("Failed to retrieve Telegram phone code hash.");
     }
 
-    return {
+    return Object.assign({
       phoneNumber: phoneNumber,
       phoneCodeHash: sendCodeResult.phoneCodeHash,
       isCodeViaApp: sendCodeResult.isCodeViaApp === true
-    };
+    }, readTelegramWebDcFromClient(client, runtimeConfig));
   } finally {
     if (client && typeof client.disconnect === "function") {
       await client.disconnect().catch(function() {});
