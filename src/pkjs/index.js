@@ -3,8 +3,6 @@ var configPageLib = require("./lib/config_page");
 var protocol = require("./lib/protocol");
 var runtimeConfigLib = require("./lib/runtime_config");
 var syncStateLib = require("./lib/sync_state");
-var telegramAdapterLib = require("./lib/telegram/adapter");
-var telegramAuthLib = require("./lib/telegram/auth");
 
 var createPkjsApp = appLib.createPkjsApp;
 var buildConfigPageUrl = configPageLib.buildConfigPageUrl;
@@ -17,12 +15,45 @@ var serializeMessageItem = protocol.serializeMessageItem;
 var serializeSettingsState = protocol.serializeSettingsState;
 var serializeSendResult = protocol.serializeSendResult;
 var SyncState = syncStateLib.SyncState;
-var createTelegramAdapter = telegramAdapterLib.createTelegramAdapter;
-var authorizeTelegramSession = telegramAuthLib.authorizeTelegramSession;
-var createTelegramClient = telegramAuthLib.createTelegramClient;
-var requestTelegramLoginCode = telegramAuthLib.requestTelegramLoginCode;
-var revokeTelegramSession = telegramAuthLib.revokeTelegramSession;
 var compiledFixtureMode = (typeof __TG_PEBBLE_FIXTURE_MODE__ === "string" ? __TG_PEBBLE_FIXTURE_MODE__ : "false") === "true";
+var telegramAdapterLib = null;
+var telegramAuthLib = null;
+
+function getTelegramAdapterLib() {
+  if (!telegramAdapterLib) {
+    telegramAdapterLib = require("./lib/telegram/adapter");
+  }
+
+  return telegramAdapterLib;
+}
+
+function getTelegramAuthLib() {
+  if (!telegramAuthLib) {
+    telegramAuthLib = require("./lib/telegram/auth");
+  }
+
+  return telegramAuthLib;
+}
+
+function createTelegramAdapter(options) {
+  return getTelegramAdapterLib().createTelegramAdapter(options);
+}
+
+function authorizeTelegramSession() {
+  return getTelegramAuthLib().authorizeTelegramSession.apply(null, arguments);
+}
+
+function createTelegramClient() {
+  return getTelegramAuthLib().createTelegramClient.apply(null, arguments);
+}
+
+function requestTelegramLoginCode() {
+  return getTelegramAuthLib().requestTelegramLoginCode.apply(null, arguments);
+}
+
+function revokeTelegramSession() {
+  return getTelegramAuthLib().revokeTelegramSession.apply(null, arguments);
+}
 
 function formatLogExtra(extra) {
   var summary = {};
@@ -215,6 +246,177 @@ function failAuthConfiguration(message) {
   app.refreshFailed();
   sendSettingsState(SyncState.desynced);
   sendEnvelope(MessageType.syncStatus, "", 0, SyncState.desynced);
+}
+
+var MINIMAL_WEBSOCKET_EXPERIMENT_URL = "wss://ws.postman-echo.com/raw";
+var MINIMAL_WEBSOCKET_EXPERIMENT_TIMEOUT_MS = 60000;
+
+function isNodeRuntime() {
+  return typeof process !== "undefined" && process && process.versions && process.versions.node;
+}
+
+function shouldRunMinimalWebSocketExperiment() {
+  return !isNodeRuntime();
+}
+
+function readExperimentValue(object, name) {
+  if (!object) {
+    return "";
+  }
+
+  try {
+    return String(object[name]);
+  } catch (_error) {
+    return "unavailable";
+  }
+}
+
+function describeWebSocketEvent(event) {
+  var detail = {};
+  var data;
+
+  if (!event) {
+    return detail;
+  }
+
+  detail.type = readExperimentValue(event, "type");
+
+  if (event.code !== undefined) {
+    detail.code = readExperimentValue(event, "code");
+  }
+
+  if (event.reason !== undefined) {
+    detail.reason = readExperimentValue(event, "reason");
+  }
+
+  if (event.wasClean !== undefined) {
+    detail.wasClean = readExperimentValue(event, "wasClean");
+  }
+
+  if (event.message !== undefined) {
+    detail.message = readExperimentValue(event, "message");
+  }
+
+  if (event.data !== undefined) {
+    data = event.data;
+    detail.dataType = Object.prototype.toString.call(data);
+    detail.dataLength = data && data.length !== undefined ? String(data.length) : "";
+    if (typeof data === "string") {
+      detail.dataPreview = data.slice(0, 80);
+    }
+  }
+
+  return detail;
+}
+
+function addSocketState(detail, socket) {
+  detail.readyState = readExperimentValue(socket, "readyState");
+  detail.protocol = readExperimentValue(socket, "protocol");
+  detail.binaryType = readExperimentValue(socket, "binaryType");
+  return detail;
+}
+
+function runMinimalWebSocketExperiment(trigger) {
+  if (typeof WebSocket !== "function") {
+    log("Minimal WebSocket experiment skipped", {
+      trigger: trigger,
+      reason: "WebSocket is unavailable"
+    });
+    return Promise.resolve({ result: "skipped" });
+  }
+
+  return new Promise(function(resolve) {
+    var socket = null;
+    var done = false;
+    var opened = false;
+    var message = "tg-pebble-ws-probe-" + String(Date.now());
+    var timeout;
+
+    function finish(result, detail) {
+      var nextDetail = detail || {};
+
+      if (done) {
+        return;
+      }
+
+      done = true;
+      clearTimeout(timeout);
+      nextDetail.result = result;
+      nextDetail.trigger = trigger;
+      nextDetail.url = MINIMAL_WEBSOCKET_EXPERIMENT_URL;
+      addSocketState(nextDetail, socket);
+      log("Minimal WebSocket experiment finished", nextDetail);
+
+      if (opened && socket && String(socket.readyState) === String(WebSocket.OPEN)) {
+        try {
+          socket.close();
+        } catch (_closeError) {}
+      }
+
+      resolve({ result: result, detail: nextDetail });
+    }
+
+    log("Minimal WebSocket experiment started", {
+      trigger: trigger,
+      url: MINIMAL_WEBSOCKET_EXPERIMENT_URL,
+      webSocketWrapped: WebSocket.__tgPebbleWrapped === true,
+      timeoutMs: MINIMAL_WEBSOCKET_EXPERIMENT_TIMEOUT_MS
+    });
+
+    try {
+      socket = new WebSocket(MINIMAL_WEBSOCKET_EXPERIMENT_URL);
+      log("Minimal WebSocket experiment constructed", addSocketState({
+        url: MINIMAL_WEBSOCKET_EXPERIMENT_URL
+      }, socket));
+    } catch (error) {
+      finish("threw", {
+        message: getErrorMessage(error, "constructor threw")
+      });
+      return;
+    }
+
+    timeout = setTimeout(function() {
+      finish("timeout", {});
+    }, MINIMAL_WEBSOCKET_EXPERIMENT_TIMEOUT_MS);
+
+    socket.onopen = function(event) {
+      opened = true;
+      log("Minimal WebSocket experiment opened", addSocketState(describeWebSocketEvent(event), socket));
+      try {
+        socket.send(message);
+        log("Minimal WebSocket experiment sent", {
+          messageLength: message.length,
+          messagePreview: message
+        });
+      } catch (error) {
+        finish("send-error", {
+          message: getErrorMessage(error, "send failed")
+        });
+      }
+    };
+
+    socket.onmessage = function(event) {
+      var detail = describeWebSocketEvent(event);
+      detail.echoMatched = event && event.data === message;
+      log("Minimal WebSocket experiment message", addSocketState(detail, socket));
+      finish("message", detail);
+    };
+
+    socket.onerror = function(event) {
+      finish("error", describeWebSocketEvent(event));
+    };
+
+    socket.onclose = function(event) {
+      var detail = describeWebSocketEvent(event);
+
+      if (done) {
+        log("Minimal WebSocket experiment closed after finish", addSocketState(detail, socket));
+        return;
+      }
+
+      finish("close", detail);
+    };
+  });
 }
 
 var TELEGRAM_WEB_DCS = [
@@ -681,6 +883,7 @@ async function handleRequestLoginCode(state) {
   var codeRequest;
   var resolvedRuntimeConfig;
   var resolvedTelegramClientFactory;
+  var experimentResult;
 
   applyConfigSettings(nextState);
 
@@ -705,6 +908,10 @@ async function handleRequestLoginCode(state) {
       forceWSS: telegramRuntimeConfig.forceWSS,
       testServers: telegramRuntimeConfig.testServers
     });
+    if (shouldRunMinimalWebSocketExperiment()) {
+      experimentResult = await runMinimalWebSocketExperiment("request-code");
+      throw new Error("Minimal WebSocket experiment result: " + experimentResult.result);
+    }
     resolvedRuntimeConfig = await resolveTelegramRuntimeConfigForConnect(telegramRuntimeConfig);
     resolvedTelegramClientFactory = createTelegramClientFactory(resolvedRuntimeConfig);
     codeRequest = await requestTelegramLoginCode(resolvedRuntimeConfig, nextState, resolvedTelegramClientFactory);
