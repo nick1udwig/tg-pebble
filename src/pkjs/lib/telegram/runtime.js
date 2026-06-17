@@ -106,8 +106,16 @@ if (typeof globalThis.WebSocket === "function" && globalThis.WebSocket.__tgPebbl
       return { type: type };
     }
 
+    function readSocketValue(socket, name) {
+      try {
+        return String(socket[name]);
+      } catch (_error) {
+        return "unavailable";
+      }
+    }
+
     function WebSocketWrapper(url, protocols) {
-      var socket = new NativeWebSocket(url);
+      var socket;
       var openTimeout;
       var settled = false;
       var listeners = {
@@ -122,7 +130,27 @@ if (typeof globalThis.WebSocket === "function" && globalThis.WebSocket.__tgPebbl
 
       logWebSocket("opening " + String(url));
       if (protocols) {
-        logWebSocket("ignoring requested subprotocol " + String(protocols));
+        logWebSocket("requested subprotocol " + String(protocols));
+      }
+
+      try {
+        socket = protocols !== undefined && protocols !== null
+          ? new NativeWebSocket(url, protocols)
+          : new NativeWebSocket(url);
+        logWebSocket("constructor succeeded " + String(url) + " readyState=" + readSocketValue(socket, "readyState"));
+      } catch (error) {
+        logWebSocket(
+          "constructor threw " + String(url) + " " +
+            String(error && error.message ? error.message : error)
+        );
+        throw error;
+      }
+
+      try {
+        socket.binaryType = "arraybuffer";
+        logWebSocket("binaryType " + String(socket.binaryType));
+      } catch (_error) {
+        logWebSocket("binaryType unavailable");
       }
 
       openTimeout = setTimeout(function() {
@@ -130,7 +158,12 @@ if (typeof globalThis.WebSocket === "function" && globalThis.WebSocket.__tgPebbl
           return;
         }
         settled = true;
-        logWebSocket("open timeout " + String(url));
+        logWebSocket(
+          "open timeout " + String(url) +
+            " readyState=" + readSocketValue(socket, "readyState") +
+            " protocol=" + readSocketValue(socket, "protocol") +
+            " binaryType=" + readSocketValue(socket, "binaryType")
+        );
         dispatch("error", createSyntheticEvent("error"));
         try {
           socket.close();
@@ -221,6 +254,7 @@ if (typeof globalThis.WebSocket === "function" && globalThis.WebSocket.__tgPebbl
         return socket.send(data);
       };
       wrapper.close = function(code, reason) {
+        markSettled();
         return socket.close(code, reason);
       };
       wrapper.addEventListener = function(kind, listener) {

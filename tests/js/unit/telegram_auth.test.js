@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   authorizeTelegramSession,
   buildTelegramClientParams,
+  createTelegramClient,
   formatAccountLabel,
   requestTelegramLoginCode,
   revokeTelegramSession,
@@ -36,6 +37,22 @@ describe("telegram auth helpers", () => {
       forceWSS: true,
       testServers: false,
     }).useWSS).toBe(true);
+  });
+
+  it("seeds a selected Telegram web DC into new sessions", () => {
+    const client = createTelegramClient({
+      apiId: 123456,
+      apiHash: "hash",
+      telegramWebDcId: 2,
+      telegramWebDcHost: "venus.web.telegram.org",
+      telegramWebDcPort: 443,
+      forceWSS: true,
+      testServers: false,
+    }, "");
+
+    expect(client.session.dcId).toBe(2);
+    expect(client.session.serverAddress).toBe("venus.web.telegram.org");
+    expect(client.session.port).toBe(443);
   });
 
   it("formats account labels from names and usernames", () => {

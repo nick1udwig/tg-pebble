@@ -28,13 +28,42 @@ function buildTelegramClientParams(runtimeConfig) {
   };
 }
 
+function seedTelegramWebDc(session, runtimeConfig) {
+  var dcId;
+  var host;
+  var port;
+
+  if (!session || typeof session.setDC !== "function" || !runtimeConfig) {
+    return;
+  }
+
+  if (session.serverAddress) {
+    return;
+  }
+
+  dcId = Number(runtimeConfig.telegramWebDcId);
+  host = String(runtimeConfig.telegramWebDcHost || "").trim();
+  port = Number(runtimeConfig.telegramWebDcPort);
+
+  if (!Number.isFinite(dcId) || dcId <= 0 || !host || !Number.isFinite(port) || port <= 0) {
+    return;
+  }
+
+  session.setDC(dcId, host, port);
+}
+
 function createTelegramClient(runtimeConfig, sessionString) {
+  var session;
+
   if (!runtimeConfig || !Number.isFinite(runtimeConfig.apiId) || !runtimeConfig.apiHash) {
     throw new Error("Telegram runtime config is incomplete.");
   }
 
+  session = new StringSession(String(sessionString || ""));
+  seedTelegramWebDc(session, runtimeConfig);
+
   return new TelegramClient(
-    new StringSession(String(sessionString || "")),
+    session,
     runtimeConfig.apiId,
     runtimeConfig.apiHash,
     buildTelegramClientParams(runtimeConfig)
