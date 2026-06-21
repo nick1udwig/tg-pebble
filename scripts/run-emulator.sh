@@ -79,7 +79,6 @@ if [[ "${fixture_mode}" != "1" && "${fixture_mode}" != "true" ]]; then
   python3 ./scripts/seed-emulator-telegram-config.py "${platform}"
 fi
 
-./scripts/build-telegram-runtime.sh >/dev/null
 TG_PEBBLE_FIXTURE_MODE="${fixture_mode}" npm run build:pkjs-legacy >/dev/null
 
 expected_fixture_mode="false"

@@ -1,8 +1,9 @@
-var runtime = require("./runtime");
+var tgprotoClient = require("../tgproto/client");
+var tgprotoSender = require("../tgproto/sender");
+var tgprotoPassword = require("../tgproto/password");
 
-var Api = runtime.Api;
-var TelegramClient = runtime.TelegramClient;
-var StringSession = runtime.StringSession;
+var NativeTelegramClient = tgprotoClient.NativeTelegramClient;
+var NativeMtProtoSender = tgprotoSender.NativeMtProtoSender;
 
 function buildApiCredentials(runtimeConfig) {
   return {
@@ -16,8 +17,7 @@ function buildTelegramClientParams(runtimeConfig) {
     connectionRetries: runtimeConfig.connectionRetries == null ? 3 : runtimeConfig.connectionRetries,
     requestRetries: runtimeConfig.requestRetries == null ? 3 : runtimeConfig.requestRetries,
     reconnectRetries: runtimeConfig.reconnectRetries == null ? 0 : runtimeConfig.reconnectRetries,
-    // Core Devices iOS can open Telegram's web endpoint directly over WSS.
-    // Keep it explicit so tests and local fixtures can still choose the old path.
+    // Native tgproto uses Telegram's web WSS endpoint directly from PKJS.
     useWSS: runtimeConfig.forceWSS === true,
     testServers: runtimeConfig.testServers === true,
     deviceModel: String(runtimeConfig.deviceModel || "TG Pebble"),
@@ -53,21 +53,42 @@ function seedTelegramWebDc(session, runtimeConfig) {
 }
 
 function createTelegramClient(runtimeConfig, sessionString) {
-  var session;
+  var client;
+  var dcId;
+  var host;
+  var port;
 
   if (!runtimeConfig || !Number.isFinite(runtimeConfig.apiId) || !runtimeConfig.apiHash) {
     throw new Error("Telegram runtime config is incomplete.");
   }
 
-  session = new StringSession(String(sessionString || ""));
-  seedTelegramWebDc(session, runtimeConfig);
+  dcId = Number(runtimeConfig.telegramWebDcId || 2);
+  host = String(runtimeConfig.telegramWebDcHost || "").trim();
+  port = Number(runtimeConfig.telegramWebDcPort || 443);
 
-  return new TelegramClient(
-    session,
-    runtimeConfig.apiId,
-    runtimeConfig.apiHash,
-    buildTelegramClientParams(runtimeConfig)
-  );
+  client = new NativeTelegramClient({
+    apiId: runtimeConfig.apiId,
+    apiHash: runtimeConfig.apiHash,
+    dcId: dcId,
+    host: host,
+    port: port,
+    sessionString: String(sessionString || ""),
+    testServers: runtimeConfig.testServers === true,
+    deviceModel: String(runtimeConfig.deviceModel || "TG Pebble"),
+    systemVersion: String(runtimeConfig.systemVersion || "Pebble PKJS"),
+    appVersion: String(runtimeConfig.appVersion || "0.1"),
+    langCode: String(runtimeConfig.langCode || "en"),
+    systemLangCode: String(runtimeConfig.systemLangCode || "en"),
+    sender: runtimeConfig.sender || new NativeMtProtoSender({
+      cryptoProvider: runtimeConfig.cryptoProvider || null
+    }),
+    passwordSrpProvider: runtimeConfig.passwordSrpProvider || tgprotoPassword.createPasswordSrpProvider({
+      cryptoProvider: runtimeConfig.cryptoProvider || null
+    })
+  });
+
+  seedTelegramWebDc(client.session, runtimeConfig);
+  return client;
 }
 
 async function ensureTelegramClientConnected(client) {
@@ -190,15 +211,12 @@ async function authorizeTelegramSession(runtimeConfig, authState, clientFactory)
       await ensureTelegramClientConnected(client);
 
       try {
-        signInResult = await client.invoke(new Api.auth.SignIn({
+        signInResult = await client.signIn({
           phoneNumber: phoneNumber,
           phoneCodeHash: phoneCodeHash,
           phoneCode: loginCode
-        }));
-        if (signInResult instanceof Api.auth.AuthorizationSignUpRequired) {
-          throw new Error("Telegram sign-up is required. Create the account in Telegram first.");
-        }
-        me = signInResult && signInResult.user ? signInResult.user : null;
+        });
+        me = signInResult && signInResult.user ? signInResult.user : signInResult;
       } catch (error) {
         if (!error || error.errorMessage !== "SESSION_PASSWORD_NEEDED") {
           throw error;
@@ -228,29 +246,7 @@ async function authorizeTelegramSession(runtimeConfig, authState, clientFactory)
       };
     }
 
-    await client.start({
-      phoneNumber: async function() {
-        return phoneNumber;
-      },
-      phoneCode: async function() {
-        return loginCode;
-      },
-      password: async function() {
-        return password;
-      },
-      onError: async function(error) {
-        throw error;
-      }
-    });
-
-    me = await client.getMe();
-
-    return {
-      sessionString: client.session.save(),
-      phoneNumber: phoneNumber,
-      accountLabel: formatAccountLabel(me),
-      userId: me && me.id != null ? String(me.id) : ""
-    };
+    throw new Error("Request a Telegram login code first.");
   } finally {
     if (client && typeof client.disconnect === "function") {
       await client.disconnect().catch(function() {});
@@ -266,7 +262,7 @@ async function revokeTelegramSession(runtimeConfig, sessionString, clientFactory
   try {
     await client.connect();
     if (await client.isUserAuthorized()) {
-      await client.invoke(new Api.auth.LogOut());
+      await client.logOut();
     }
   } finally {
     if (client && typeof client.disconnect === "function") {
