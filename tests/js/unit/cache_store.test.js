@@ -45,6 +45,16 @@ describe("createCacheStore", () => {
       telegramWebDcPort: "443",
       forceWSS: true,
       authSessionString: "temp-auth-session",
+      passwordRequired: true,
+      passwordHint: "hint",
+      passwordChallenge: {
+        srpId: "42",
+        g: "2",
+        p: "p64",
+        salt1: "s164",
+        salt2: "s264",
+        srpB: "b64",
+      },
     });
 
     expect(store.getAuthState()).toEqual({
@@ -58,6 +68,16 @@ describe("createCacheStore", () => {
       telegramWebDcPort: 443,
       forceWSS: true,
       authSessionString: "temp-auth-session",
+      passwordRequired: true,
+      passwordHint: "hint",
+      passwordChallenge: {
+        srpId: "42",
+        g: 2,
+        p: "p64",
+        salt1: "s164",
+        salt2: "s264",
+        srpB: "b64",
+      },
     });
   });
 

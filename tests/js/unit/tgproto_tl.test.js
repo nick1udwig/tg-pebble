@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import pako from "pako";
 
-import { ByteReader, bytesFromHex, bytesToHex } from "../../../src/pkjs/lib/tgproto/bytes.js";
+import { ByteReader, ByteWriter, bytesFromHex, bytesToHex } from "../../../src/pkjs/lib/tgproto/bytes.js";
 import { NativeTelegramClient } from "../../../src/pkjs/lib/tgproto/client.js";
-import { NativeTelegramSession, SESSION_PREFIX } from "../../../src/pkjs/lib/tgproto/session.js";
-import { Api, deserializeObject, serializeObject } from "../../../src/pkjs/lib/tgproto/tl.js";
+import { base64Decode, base64Encode, NativeTelegramSession, SESSION_PREFIX } from "../../../src/pkjs/lib/tgproto/session.js";
+import { Api, deserializeObject, GZIP_PACKED_CONSTRUCTOR_ID, serializeObject } from "../../../src/pkjs/lib/tgproto/tl.js";
 
 describe("tgproto TL codec", () => {
   it("serializes auth.sendCode with CodeSettings", () => {
@@ -70,6 +71,26 @@ describe("tgproto TL codec", () => {
     });
   });
 
+  it("unpacks gzip_packed constructor responses", () => {
+    const object = Api.auth.SentCode({
+      type: Api.auth.SentCodeTypeApp({ length: 5 }),
+      phoneCodeHash: "phone-hash",
+    });
+    const writer = new ByteWriter();
+
+    writer.writeUInt32(GZIP_PACKED_CONSTRUCTOR_ID);
+    writer.writeTlBytes(pako.gzip(serializeObject(object)));
+
+    expect(deserializeObject(writer.result())).toMatchObject({
+      tlName: "auth.sentCode",
+      phoneCodeHash: "phone-hash",
+      type: {
+        tlName: "auth.sentCodeTypeApp",
+        length: 5,
+      },
+    });
+  });
+
   it("keeps MTProto auth string fields as raw bytes", () => {
     const request = Api.ReqDHParams({
       nonce: new Uint8Array(16),
@@ -86,10 +107,23 @@ describe("tgproto TL codec", () => {
     expect(bytesToHex(decoded.encryptedData)).toBe("80ff00");
   });
 
+  it("encodes base64 without relying on host runtime helpers", () => {
+    const input = new Uint8Array([0, 1, 2, 253, 254, 255]);
+
+    expect(base64Encode(input)).toBe("AAEC/f7/");
+    expect(bytesToHex(base64Decode("AAEC/f7/"))).toBe("000102fdfeff");
+  });
+
   it("round-trips native TG2 sessions", () => {
     const session = new NativeTelegramSession();
+    const authKey = new Uint8Array(256);
+
+    for (let index = 0; index < authKey.length; index += 1) {
+      authKey[index] = index & 255;
+    }
+
     session.setDC(1, "pluto.web.telegram.org", 443);
-    session.setAuthKey(new Uint8Array([1, 2, 3, 4]), "key-id");
+    session.setAuthKey(authKey, "key-id");
     session.serverSalt = "42";
     session.userId = "7";
 
@@ -100,7 +134,9 @@ describe("tgproto TL codec", () => {
     expect(restored.dcId).toBe(1);
     expect(restored.serverAddress).toBe("pluto.web.telegram.org");
     expect(restored.authKeyId).toBe("key-id");
-    expect(bytesToHex(restored.authKey)).toBe("01020304");
+    expect(restored.authKey.length).toBe(256);
+    expect(bytesToHex(restored.authKey.slice(0, 4))).toBe("00010203");
+    expect(bytesToHex(restored.authKey.slice(-4))).toBe("fcfdfeff");
     expect(restored.serverSalt).toBe("42");
     expect(restored.userId).toBe("7");
   });
@@ -170,6 +206,60 @@ describe("native Telegram client facade", () => {
     expect(sender.disconnect).toHaveBeenCalledTimes(1);
     expect(client.session.dcId).toBe(1);
     expect(client.session.serverAddress).toBe("pluto.web.telegram.org");
+  });
+
+  it("emits 2FA password hooks around SRP and checkPassword", async () => {
+    const hooks = [];
+    const passwordCheck = Api.InputCheckPasswordSRP({
+      srpId: "42",
+      A: new Uint8Array([1]),
+      M1: new Uint8Array([2]),
+    });
+    const sender = {
+      connect: vi.fn(async () => {}),
+      disconnect: vi.fn(async () => {}),
+      invoke: vi.fn(async ({ request }) => {
+        if (request.className === "account.getPassword") {
+          return {
+            tlName: "account.password",
+            currentAlgo: { hint: "ignored" },
+            srpB: new Uint8Array([3]),
+            srpId: "42",
+          };
+        }
+        if (request.className === "auth.checkPassword") {
+          expect(request.password).toBe(passwordCheck);
+          return { user: { id: "7", firstName: "Alice" } };
+        }
+        throw new Error("Unexpected request: " + request.className);
+      }),
+    };
+    const client = new NativeTelegramClient({
+      sender,
+      passwordSrpProvider: {
+        computeCheck: vi.fn(async () => passwordCheck),
+      },
+    });
+
+    await expect(client.signInWithPassword({}, {
+      password: async () => "secret",
+      onPasswordInfo: () => hooks.push("password-info"),
+      onComputeStart: () => hooks.push("compute-start"),
+      onComputeDone: () => hooks.push("compute-done"),
+      onCheckStart: () => hooks.push("check-start"),
+      onCheckDone: () => hooks.push("check-done"),
+    })).resolves.toMatchObject({
+      id: "7",
+      firstName: "Alice",
+    });
+
+    expect(hooks).toEqual([
+      "password-info",
+      "compute-start",
+      "compute-done",
+      "check-start",
+      "check-done",
+    ]);
   });
 
   it("normalizes dialogs to the existing adapter shape", async () => {

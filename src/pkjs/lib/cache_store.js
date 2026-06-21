@@ -29,7 +29,10 @@ var DEFAULT_AUTH_STATE = Object.freeze({
   telegramWebDcHost: "",
   telegramWebDcPort: 0,
   forceWSS: false,
-  authSessionString: ""
+  authSessionString: "",
+  passwordRequired: false,
+  passwordHint: "",
+  passwordChallenge: null
 });
 
 var MAX_CACHED_MESSAGES_PER_CHAT = 4;
@@ -76,6 +79,9 @@ function normalizeAuthState(authState) {
   var codeRequestedAt = Number(authState && authState.codeRequestedAt);
   var telegramWebDcId = Number(authState && authState.telegramWebDcId);
   var telegramWebDcPort = Number(authState && authState.telegramWebDcPort);
+  var passwordChallenge = authState && authState.passwordChallenge && typeof authState.passwordChallenge === "object"
+    ? authState.passwordChallenge
+    : null;
 
   return {
     errorMessage: String(authState && authState.errorMessage ? authState.errorMessage : ""),
@@ -89,7 +95,17 @@ function normalizeAuthState(authState) {
     telegramWebDcHost: String(authState && authState.telegramWebDcHost ? authState.telegramWebDcHost : "").trim(),
     telegramWebDcPort: Number.isFinite(telegramWebDcPort) && telegramWebDcPort > 0 ? telegramWebDcPort : 0,
     forceWSS: authState && authState.forceWSS === true,
-    authSessionString: String(authState && authState.authSessionString ? authState.authSessionString : "")
+    authSessionString: String(authState && authState.authSessionString ? authState.authSessionString : ""),
+    passwordRequired: authState && authState.passwordRequired === true,
+    passwordHint: String(authState && authState.passwordHint ? authState.passwordHint : ""),
+    passwordChallenge: passwordChallenge ? {
+      srpId: String(passwordChallenge.srpId || ""),
+      g: Number(passwordChallenge.g || 0),
+      p: String(passwordChallenge.p || ""),
+      salt1: String(passwordChallenge.salt1 || ""),
+      salt2: String(passwordChallenge.salt2 || ""),
+      srpB: String(passwordChallenge.srpB || "")
+    } : null
   };
 }
 

@@ -43,6 +43,10 @@ function authorizeTelegramSession() {
   return getTelegramAuthLib().authorizeTelegramSession.apply(null, arguments);
 }
 
+function completeTelegramPasswordAuth() {
+  return getTelegramAuthLib().completeTelegramPasswordAuth.apply(null, arguments);
+}
+
 function createTelegramClient() {
   return getTelegramAuthLib().createTelegramClient.apply(null, arguments);
 }
@@ -53,6 +57,98 @@ function requestTelegramLoginCode() {
 
 function revokeTelegramSession() {
   return getTelegramAuthLib().revokeTelegramSession.apply(null, arguments);
+}
+
+function isPasswordNeededError(error) {
+  try {
+    if (typeof getTelegramAuthLib().isPasswordNeededError === "function") {
+      return getTelegramAuthLib().isPasswordNeededError(error);
+    }
+  } catch (_error) {}
+
+  return !!(error && (error.passwordRequired === true || error.errorMessage === "SESSION_PASSWORD_NEEDED"));
+}
+
+function fallbackFingerprintText(value) {
+  var text = String(value || "");
+  var hash = 5381;
+  var index;
+
+  if (!text) {
+    return "";
+  }
+
+  for (index = 0; index < text.length; index += 1) {
+    hash = ((hash << 5) - hash + text.charCodeAt(index)) >>> 0;
+  }
+
+  return String(text.length) + ":" + ("00000000" + hash.toString(16)).slice(-8);
+}
+
+function fingerprintText(value) {
+  try {
+    if (typeof getTelegramAuthLib().fingerprintText === "function") {
+      return getTelegramAuthLib().fingerprintText(value);
+    }
+  } catch (_error) {}
+
+  return fallbackFingerprintText(value);
+}
+
+function describeTelegramSessionString(sessionString) {
+  var sessionValue = String(sessionString || "");
+
+  try {
+    if (typeof getTelegramAuthLib().describeTelegramSessionString === "function") {
+      return getTelegramAuthLib().describeTelegramSessionString(sessionValue);
+    }
+  } catch (_error) {}
+
+  return {
+    authSessionLength: sessionValue.length,
+    authSessionFp: fallbackFingerprintText(sessionValue),
+    authSessionRestored: false,
+    sessionDcId: "",
+    sessionHost: "",
+    sessionPort: "",
+    hasAuthKey: false,
+    authKeyLength: 0,
+    authKeyIdFp: "",
+    serverSaltPresent: false
+  };
+}
+
+function buildAuthRequestDebug(authRequest) {
+  var request = authRequest || {};
+  var phoneCodeHash = String(request.phoneCodeHash || "");
+  var codeRequestedAt = Number(request.codeRequestedAt || 0);
+  var details = {
+    codeRequestedAt: Number.isFinite(codeRequestedAt) && codeRequestedAt > 0 ? codeRequestedAt : "",
+    requestAgeMs: Number.isFinite(codeRequestedAt) && codeRequestedAt > 0 ? Date.now() - codeRequestedAt : "",
+    dcId: request.telegramWebDcId || "",
+    host: request.telegramWebDcHost || "",
+    port: request.telegramWebDcPort || "",
+    forceWSS: request.forceWSS === true,
+    phoneCodeHashLength: phoneCodeHash.length,
+    phoneCodeHashFp: fingerprintText(phoneCodeHash)
+  };
+
+  return Object.assign(details, describeTelegramSessionString(request.authSessionString));
+}
+
+function buildAuthAttemptDebug(authRequest, state) {
+  var nextState = state || {};
+  var loginCode = String(nextState.loginCode || "").trim();
+  var passwordProof = nextState.passwordProof || {};
+
+  return Object.assign(buildAuthRequestDebug(authRequest), {
+    loginCodeLength: loginCode.length,
+    loginCodeNumeric: /^[0-9]+$/.test(loginCode),
+    hasPassword: String(nextState.password || "").length > 0,
+    hasPasswordProof: !!(passwordProof.srpId && passwordProof.A && passwordProof.M1),
+    passwordProofAFp: passwordProof.A ? fingerprintText(passwordProof.A) : "",
+    passwordProofM1Fp: passwordProof.M1 ? fingerprintText(passwordProof.M1) : ""
+  });
 }
 
 function formatLogExtra(extra) {
@@ -218,6 +314,16 @@ function sendSettingsState(syncState) {
     0,
     syncState || app.getSyncState()
   );
+}
+
+function openConfiguration() {
+  var configUrl = buildConfigPageUrl(
+    telegramRuntimeConfig && telegramRuntimeConfig.configUrl ? telegramRuntimeConfig.configUrl : "http://127.0.0.1:4173",
+    app.getConfigState(),
+    Date.now()
+  );
+  log("showConfiguration", { configUrl: configUrl });
+  Pebble.openURL(configUrl);
 }
 
 function rememberPhoneNumber(phoneNumber) {
@@ -1000,15 +1106,51 @@ async function handleConfigSave(state) {
         pendingAuthRequest.authSessionString
       );
       applyTelegramRuntimeConfig(resolvedRuntimeConfig);
+      log("Telegram config auth attempt", buildAuthAttemptDebug(pendingAuthRequest, nextState));
       app.setSession(await authorizeTelegramSession(
         resolvedRuntimeConfig,
-        Object.assign({}, nextState, { phoneCodeHash: pendingAuthRequest.phoneCodeHash }),
+        Object.assign({}, nextState, {
+          phoneCodeHash: pendingAuthRequest.phoneCodeHash,
+          authSessionString: pendingAuthRequest.authSessionString,
+          authStageLogger: function(message, extra) {
+            log(message, extra);
+          }
+        }),
         resolvedTelegramClientFactory
       ));
       app.clearAuthError();
       app.clearCache();
       await sendChatList();
     } catch (error) {
+      if (isPasswordNeededError(error) && error.passwordChallenge) {
+        log("Telegram config auth requires 2FA", Object.assign(
+          buildAuthRequestDebug(pendingAuthRequest),
+          {
+            passwordHintPresent: !!error.passwordHint,
+            passwordChallengePresent: true,
+            passwordChallengeSrpId: error.passwordChallenge.srpId || "",
+            passwordChallengePFp: fingerprintText(error.passwordChallenge.p || ""),
+            passwordChallengeBFp: fingerprintText(error.passwordChallenge.srpB || "")
+          }
+        ));
+        app.setAuthPasswordRequired(Object.assign({}, pendingAuthRequest, {
+          phoneNumber: nextState.phoneNumber,
+          authSessionString: error.authSessionString || pendingAuthRequest.authSessionString,
+          passwordHint: error.passwordHint || "",
+          passwordChallenge: error.passwordChallenge
+        }));
+        app.refreshFailed();
+        sendSettingsState(SyncState.desynced);
+        sendEnvelope(MessageType.syncStatus, "", 0, SyncState.desynced);
+        setTimeout(function() {
+          try {
+            openConfiguration();
+          } catch (openError) {
+            log("Telegram 2FA config reopen failed", openError);
+          }
+        }, 250);
+        return;
+      }
       log("Telegram config auth failed", error);
       app.setAuthError(getErrorMessage(error, "Telegram sign-in failed."));
       app.refreshFailed();
@@ -1019,6 +1161,69 @@ async function handleConfigSave(state) {
   }
 
   sendSettingsState(app.getSyncState());
+}
+
+async function handleSubmitPasswordProof(state) {
+  var nextState = state || {};
+  var pendingAuthRequest;
+  var resolvedRuntimeConfig;
+  var resolvedTelegramClientFactory;
+
+  applyConfigSettings(nextState);
+
+  if (!nextState.phoneNumber) {
+    failAuthConfiguration("Phone number is required.");
+    return;
+  }
+
+  if (!telegramRuntimeConfig || typeof telegramClientFactory !== "function") {
+    failAuthConfiguration("Telegram auth is not configured in this build.");
+    return;
+  }
+
+  pendingAuthRequest = app.getPendingAuthRequest(nextState.phoneNumber);
+  if (!pendingAuthRequest || !pendingAuthRequest.passwordRequired || !pendingAuthRequest.authSessionString) {
+    failAuthConfiguration("Enter the login code before submitting 2FA.");
+    return;
+  }
+
+  if (!nextState.passwordProof || !nextState.passwordProof.srpId || !nextState.passwordProof.A || !nextState.passwordProof.M1) {
+    failAuthConfiguration("Telegram 2FA proof is missing.");
+    return;
+  }
+
+  app.refreshStarted();
+  sendEnvelope(MessageType.syncStatus, "", 0, SyncState.syncing);
+
+  try {
+    resolvedRuntimeConfig = await resolveTelegramRuntimeConfigForAuthRequest(telegramRuntimeConfig, pendingAuthRequest);
+    resolvedTelegramClientFactory = createTelegramClientFactory(
+      resolvedRuntimeConfig,
+      pendingAuthRequest.authSessionString
+    );
+    applyTelegramRuntimeConfig(resolvedRuntimeConfig);
+    log("Telegram config 2FA auth attempt", buildAuthAttemptDebug(pendingAuthRequest, nextState));
+    app.setSession(await completeTelegramPasswordAuth(
+      resolvedRuntimeConfig,
+      Object.assign({}, nextState, {
+        phoneCodeHash: pendingAuthRequest.phoneCodeHash,
+        authSessionString: pendingAuthRequest.authSessionString,
+        authStageLogger: function(message, extra) {
+          log(message, extra);
+        }
+      }),
+      resolvedTelegramClientFactory
+    ));
+    app.clearAuthError();
+    app.clearCache();
+    await sendChatList();
+  } catch (error) {
+    log("Telegram config 2FA auth failed", error);
+    app.setAuthError(getErrorMessage(error, "Telegram 2FA sign-in failed."));
+    app.refreshFailed();
+    sendSettingsState(SyncState.desynced);
+    sendEnvelope(MessageType.syncStatus, "", 0, SyncState.desynced);
+  }
 }
 
 async function handleRequestLoginCode(state) {
@@ -1053,14 +1258,12 @@ async function handleRequestLoginCode(state) {
     resolvedRuntimeConfig = await resolveTelegramRuntimeConfigForConnect(telegramRuntimeConfig);
     resolvedTelegramClientFactory = applyTelegramRuntimeConfig(resolvedRuntimeConfig);
     codeRequest = await requestTelegramLoginCode(resolvedRuntimeConfig, nextState, resolvedTelegramClientFactory);
+    codeRequest.codeRequestedAt = Date.now();
     resolvedRuntimeConfig = await resolveTelegramRuntimeConfigForAuthRequest(resolvedRuntimeConfig, codeRequest);
     applyTelegramRuntimeConfig(resolvedRuntimeConfig);
-    log("Telegram login code request succeeded", {
-      isCodeViaApp: codeRequest.isCodeViaApp === true,
-      dcId: codeRequest.telegramWebDcId || "",
-      host: codeRequest.telegramWebDcHost || "",
-      port: codeRequest.telegramWebDcPort || ""
-    });
+    log("Telegram login code request succeeded", Object.assign({
+      isCodeViaApp: codeRequest.isCodeViaApp === true
+    }, buildAuthRequestDebug(codeRequest)));
     app.setAuthCodeRequest(codeRequest);
     sendSettingsState(SyncState.desynced);
     sendEnvelope(MessageType.syncStatus, "", 0, SyncState.desynced);
@@ -1108,6 +1311,9 @@ async function handleConfigAction(actionPayload) {
     case "config:save":
     case "auth:save":
       await handleConfigSave(state);
+      break;
+    case "auth:submit-password":
+      await handleSubmitPasswordProof(state);
       break;
     case "settings:update":
       await handleConfigSave(state);
@@ -1214,13 +1420,7 @@ if (typeof Pebble !== "undefined" && Pebble.addEventListener) {
   });
 
   Pebble.addEventListener("showConfiguration", function() {
-    var configUrl = buildConfigPageUrl(
-      telegramRuntimeConfig && telegramRuntimeConfig.configUrl ? telegramRuntimeConfig.configUrl : "http://127.0.0.1:4173",
-      app.getConfigState(),
-      Date.now()
-    );
-    log("showConfiguration", { configUrl: configUrl });
-    Pebble.openURL(configUrl);
+    openConfiguration();
   });
 
   Pebble.addEventListener("webviewclosed", function(event) {

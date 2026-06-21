@@ -3,51 +3,91 @@
 var bytes = require("./bytes");
 
 var SESSION_PREFIX = "TG2.";
-
-function bytesToBinaryString(value) {
-  var out = "";
-  var index;
-
-  for (index = 0; index < value.length; index += 1) {
-    out += String.fromCharCode(value[index]);
-  }
-
-  return out;
-}
-
-function binaryStringToBytes(value) {
-  var out = new Uint8Array(value.length);
-  var index;
-
-  for (index = 0; index < value.length; index += 1) {
-    out[index] = value.charCodeAt(index) & 255;
-  }
-
-  return out;
-}
+var BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 function base64Encode(value) {
-  if (typeof btoa === "function") {
-    return btoa(bytesToBinaryString(value));
+  var input = value || new Uint8Array(0);
+  var out = "";
+  var index;
+  var first;
+  var second;
+  var third;
+  var hasSecond;
+  var hasThird;
+
+  for (index = 0; index < input.length; index += 3) {
+    first = input[index];
+    hasSecond = index + 1 < input.length;
+    hasThird = index + 2 < input.length;
+    second = hasSecond ? input[index + 1] : 0;
+    third = hasThird ? input[index + 2] : 0;
+
+    out += BASE64_ALPHABET.charAt(first >> 2);
+    out += BASE64_ALPHABET.charAt(((first & 3) << 4) | (second >> 4));
+    out += hasSecond ? BASE64_ALPHABET.charAt(((second & 15) << 2) | (third >> 6)) : "=";
+    out += hasThird ? BASE64_ALPHABET.charAt(third & 63) : "=";
   }
 
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(value).toString("base64");
+  return out;
+}
+
+function decodeBase64Char(value) {
+  var index = BASE64_ALPHABET.indexOf(value);
+
+  if (index < 0) {
+    throw new Error("Invalid base64 character.");
   }
 
-  throw new Error("No base64 encoder is available.");
+  return index;
 }
 
 function base64Decode(value) {
-  if (typeof atob === "function") {
-    return binaryStringToBytes(atob(value));
+  var text = String(value || "").replace(/\s+/g, "");
+  var out = [];
+  var index;
+  var first;
+  var second;
+  var third;
+  var fourth;
+  var thirdChar;
+  var fourthChar;
+  var lastBlock;
+
+  if (!text) {
+    return new Uint8Array(0);
   }
 
-  if (typeof Buffer !== "undefined") {
-    return new Uint8Array(Buffer.from(value, "base64"));
+  if (text.length % 4 !== 0) {
+    throw new Error("Invalid base64 length.");
   }
 
-  throw new Error("No base64 decoder is available.");
+  for (index = 0; index < text.length; index += 4) {
+    thirdChar = text.charAt(index + 2);
+    fourthChar = text.charAt(index + 3);
+    lastBlock = index + 4 === text.length;
+
+    if ((thirdChar === "=" || fourthChar === "=") && !lastBlock) {
+      throw new Error("Invalid base64 padding.");
+    }
+    if (thirdChar === "=" && fourthChar !== "=") {
+      throw new Error("Invalid base64 padding.");
+    }
+
+    first = decodeBase64Char(text.charAt(index));
+    second = decodeBase64Char(text.charAt(index + 1));
+    third = thirdChar === "=" ? 0 : decodeBase64Char(thirdChar);
+    fourth = fourthChar === "=" ? 0 : decodeBase64Char(fourthChar);
+
+    out.push(((first << 2) | (second >> 4)) & 255);
+    if (thirdChar !== "=") {
+      out.push((((second & 15) << 4) | (third >> 2)) & 255);
+    }
+    if (fourthChar !== "=") {
+      out.push((((third & 3) << 6) | fourth) & 255);
+    }
+  }
+
+  return new Uint8Array(out);
 }
 
 function encodeJson(value) {

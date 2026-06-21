@@ -1,5 +1,7 @@
 "use strict";
 
+var pako = require("pako");
+
 var bytes = require("./bytes");
 var schema = require("./tl_schema");
 
@@ -7,6 +9,7 @@ var VECTOR_CONSTRUCTOR_ID = 0x1cb5c415;
 var BOOL_FALSE_CONSTRUCTOR_ID = 0xbc799737;
 var BOOL_TRUE_CONSTRUCTOR_ID = 0x997275b5;
 var TRUE_CONSTRUCTOR_ID = 0x3fedd339;
+var GZIP_PACKED_CONSTRUCTOR_ID = 0x3072cfa1;
 
 var parsedSchema = null;
 
@@ -566,6 +569,10 @@ function readObject(reader) {
     return readBoolFromConstructor(id);
   }
 
+  if (id === GZIP_PACKED_CONSTRUCTOR_ID) {
+    return deserializeObject(pako.inflate(reader.readTlBytes()));
+  }
+
   def = getDefinitionById(id);
   return readBareObjectDef(reader, def);
 }
@@ -614,6 +621,7 @@ module.exports = {
   Api: Api,
   BOOL_FALSE_CONSTRUCTOR_ID: BOOL_FALSE_CONSTRUCTOR_ID,
   BOOL_TRUE_CONSTRUCTOR_ID: BOOL_TRUE_CONSTRUCTOR_ID,
+  GZIP_PACKED_CONSTRUCTOR_ID: GZIP_PACKED_CONSTRUCTOR_ID,
   TRUE_CONSTRUCTOR_ID: TRUE_CONSTRUCTOR_ID,
   VECTOR_CONSTRUCTOR_ID: VECTOR_CONSTRUCTOR_ID,
   deserializeObject: deserializeObject,

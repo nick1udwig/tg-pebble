@@ -3,11 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 import {
   authorizeTelegramSession,
   buildTelegramClientParams,
+  completeTelegramPasswordAuth,
   createTelegramClient,
+  describeTelegramSessionString,
+  encodePasswordChallenge,
+  fingerprintText,
   formatAccountLabel,
+  isPasswordNeededError,
   requestTelegramLoginCode,
   revokeTelegramSession,
 } from "../../../src/pkjs/lib/telegram/auth.js";
+import { base64Encode, NativeTelegramSession } from "../../../src/pkjs/lib/tgproto/session.js";
 
 describe("telegram auth helpers", () => {
   it("builds stable Telegram client params without relying on host os metadata", () => {
@@ -59,6 +65,32 @@ describe("telegram auth helpers", () => {
     expect(formatAccountLabel({ firstName: "Alice", lastName: "Example" })).toBe("Alice Example");
     expect(formatAccountLabel({ username: "bot_name" })).toBe("@bot_name");
     expect(formatAccountLabel({ id: 42 })).toBe("42");
+  });
+
+  it("describes restored auth sessions without exposing key material", () => {
+    const session = new NativeTelegramSession();
+    const authKey = new Uint8Array(256);
+    for (let index = 0; index < authKey.length; index += 1) {
+      authKey[index] = index & 255;
+    }
+    session.setDC(1, "pluto.web.telegram.org", 443);
+    session.setAuthKey(authKey, "123456789");
+    session.serverSalt = "42";
+
+    const saved = session.save();
+
+    expect(describeTelegramSessionString(saved)).toMatchObject({
+      authSessionLength: saved.length,
+      authSessionFp: fingerprintText(saved),
+      authSessionRestored: true,
+      sessionDcId: 1,
+      sessionHost: "pluto.web.telegram.org",
+      sessionPort: 443,
+      hasAuthKey: true,
+      authKeyLength: 256,
+      authKeyIdFp: fingerprintText("123456789"),
+      serverSaltPresent: true,
+    });
   });
 
   it("requires a phone number before creating a Telegram client", async () => {
@@ -200,7 +232,32 @@ describe("telegram auth helpers", () => {
     expect(disconnect).toHaveBeenCalledTimes(1);
   });
 
+  it("passes the pending auth session into the sign-in client factory", async () => {
+    const signIn = vi.fn(async () => ({ id: 7, firstName: "Alice" }));
+    const client = {
+      connected: true,
+      session: { save: () => "saved-session" },
+      signIn,
+      disconnect: vi.fn(async () => {}),
+    };
+    const clientFactory = vi.fn(() => client);
+
+    await authorizeTelegramSession(
+      { apiId: 123456, apiHash: "hash", useWSS: true, testServers: false },
+      {
+        phoneNumber: "+15551234567",
+        loginCode: "12345",
+        phoneCodeHash: "hash-123",
+        authSessionString: "temp-auth-session",
+      },
+      clientFactory,
+    );
+
+    expect(clientFactory).toHaveBeenCalledWith("temp-auth-session");
+  });
+
   it("uses the 2FA password when Telegram requires one after code sign-in", async () => {
+    const authStageLogger = vi.fn();
     const signIn = vi.fn(async () => {
       const error = new Error("Password needed.");
       error.errorMessage = "SESSION_PASSWORD_NEEDED";
@@ -208,6 +265,11 @@ describe("telegram auth helpers", () => {
     });
     const signInWithPassword = vi.fn(async (_credentials, callbacks) => {
       expect(await callbacks.password()).toBe("secret");
+      await callbacks.onPasswordInfo();
+      await callbacks.onComputeStart();
+      await callbacks.onComputeDone();
+      await callbacks.onCheckStart();
+      await callbacks.onCheckDone();
       return { id: 7, firstName: "Alice", lastName: "Example" };
     });
     const client = {
@@ -225,6 +287,7 @@ describe("telegram auth helpers", () => {
         loginCode: "12345",
         phoneCodeHash: "hash-123",
         password: "secret",
+        authStageLogger,
       },
       () => client,
     )).resolves.toMatchObject({
@@ -234,8 +297,123 @@ describe("telegram auth helpers", () => {
 
     expect(signInWithPassword).toHaveBeenCalledWith(
       { apiId: 123456, apiHash: "hash" },
-      expect.objectContaining({ password: expect.any(Function), onError: expect.any(Function) }),
+      expect.objectContaining({
+        password: expect.any(Function),
+        onPasswordInfo: expect.any(Function),
+        onComputeStart: expect.any(Function),
+        onComputeDone: expect.any(Function),
+        onCheckStart: expect.any(Function),
+        onCheckDone: expect.any(Function),
+        onError: expect.any(Function),
+      }),
     );
+    expect(authStageLogger.mock.calls.map((call) => call[0])).toEqual([
+      "Telegram auth connect started",
+      "Telegram auth connect done",
+      "Telegram auth signIn started",
+      "Telegram auth signIn requires 2FA",
+      "Telegram auth 2FA started",
+      "Telegram auth 2FA password info received",
+      "Telegram auth 2FA SRP compute started",
+      "Telegram auth 2FA SRP compute done",
+      "Telegram auth 2FA checkPassword started",
+      "Telegram auth 2FA checkPassword done",
+      "Telegram auth 2FA done",
+    ]);
+  });
+
+  it("returns a serializable password challenge when code sign-in requires 2FA", async () => {
+    const authStageLogger = vi.fn();
+    const signIn = vi.fn(async () => {
+      const error = new Error("Password needed.");
+      error.errorMessage = "SESSION_PASSWORD_NEEDED";
+      throw error;
+    });
+    const passwordInfo = {
+      currentAlgo: {
+        salt1: new Uint8Array([1, 2, 3]),
+        salt2: new Uint8Array([4, 5, 6]),
+        g: 2,
+        p: new Uint8Array([7, 8, 9]),
+      },
+      srpB: new Uint8Array([10, 11, 12]),
+      srpId: "42",
+      hint: "hint",
+    };
+    const client = {
+      connected: true,
+      session: { save: () => "temp-auth-session-after-code" },
+      signIn,
+      getPasswordInfo: vi.fn(async () => passwordInfo),
+      disconnect: vi.fn(async () => {}),
+    };
+
+    try {
+      await authorizeTelegramSession(
+        { apiId: 123456, apiHash: "hash", useWSS: true, testServers: false },
+        {
+          phoneNumber: "+15551234567",
+          loginCode: "12345",
+          phoneCodeHash: "hash-123",
+          authStageLogger,
+        },
+        () => client,
+      );
+      throw new Error("Expected password-needed error");
+    } catch (error) {
+      expect(isPasswordNeededError(error)).toBe(true);
+      expect(error).toMatchObject({
+        passwordRequired: true,
+        phoneNumber: "+15551234567",
+        phoneCodeHash: "hash-123",
+        authSessionString: "temp-auth-session-after-code",
+        passwordHint: "hint",
+        passwordChallenge: encodePasswordChallenge(passwordInfo),
+      });
+    }
+
+    expect(client.getPasswordInfo).toHaveBeenCalledTimes(1);
+    expect(client.disconnect).toHaveBeenCalledTimes(1);
+    expect(authStageLogger.mock.calls.map((call) => call[0])).toContain("Telegram auth 2FA password info requested");
+  });
+
+  it("completes password-required auth with a config-page SRP proof", async () => {
+    const checkPassword = vi.fn(async () => ({ id: 7, firstName: "Alice", lastName: "Example" }));
+    const client = {
+      connected: false,
+      connect: vi.fn(async () => {}),
+      session: { save: () => "saved-session" },
+      checkPassword,
+      disconnect: vi.fn(async () => {}),
+    };
+
+    await expect(completeTelegramPasswordAuth(
+      { apiId: 123456, apiHash: "hash", useWSS: true, testServers: false },
+      {
+        phoneNumber: "+15551234567",
+        authSessionString: "temp-auth-session",
+        passwordProof: {
+          srpId: "42",
+          A: base64Encode(new Uint8Array([1, 2, 3])),
+          M1: base64Encode(new Uint8Array([4, 5, 6])),
+        },
+      },
+      () => client,
+    )).resolves.toEqual({
+      sessionString: "saved-session",
+      phoneNumber: "+15551234567",
+      accountLabel: "Alice Example",
+      userId: "7",
+    });
+
+    expect(client.connect).toHaveBeenCalledTimes(1);
+    expect(checkPassword).toHaveBeenCalledWith(expect.objectContaining({
+      className: "inputCheckPasswordSRP",
+      srpId: "42",
+      A: new Uint8Array([1, 2, 3]),
+      M1: new Uint8Array([4, 5, 6]),
+    }));
+    expect(client.disconnect).toHaveBeenCalledTimes(1);
   });
 
   it("disconnects the client when authorization fails", async () => {

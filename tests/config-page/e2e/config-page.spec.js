@@ -36,7 +36,6 @@ test("loads embedded state and submits config changes in one payload", async ({ 
   await page.fill("#phone-number", "+15551234567");
   await page.click("#request-code");
   await page.fill("#login-code", "12345");
-  await page.fill("#password", "hunter2");
   await page.check("#send-mode-preview");
   await page.uncheck("#preview-chat-message");
   await page.click("#save-login");
@@ -56,13 +55,13 @@ test("loads embedded state and submits config changes in one payload", async ({ 
   });
   expect(submitted).toContainEqual({
     action: "config:save",
-    state: {
-      phoneNumber: "+15551234567",
-      loginCode: "12345",
-      password: "hunter2",
-      sendMode: "preview",
-      previewChatMessage: false,
-    },
+      state: {
+        phoneNumber: "+15551234567",
+        loginCode: "12345",
+        password: "",
+        sendMode: "preview",
+        previewChatMessage: false,
+      },
   });
 
   const stored = await page.evaluate(() => JSON.parse(window.localStorage.getItem("tg_pebble:config_state")));
@@ -77,6 +76,70 @@ test("loads embedded state and submits config changes in one payload", async ({ 
   });
   expect(stored.loginCode).toBeUndefined();
   expect(stored.password).toBeUndefined();
+});
+
+test("renders the 2FA step and submits a WebCrypto SRP proof", async ({ page }) => {
+  await page.route("**/srp.js", async (route) => {
+    await route.fulfill({
+      contentType: "text/javascript",
+      body: `
+        export async function computeTelegramPasswordProof(challenge, password) {
+          if (challenge.srpId !== "42" || password !== "hunter2") {
+            throw new Error("bad proof input");
+          }
+          return { srpId: "42", A: "A64", M1: "M164" };
+        }
+      `,
+    });
+  });
+
+  const initialState = encodeURIComponent(JSON.stringify({
+    phoneNumber: "+15551234567",
+    sendMode: "preview",
+    previewChatMessage: false,
+    hasSession: false,
+    codeRequested: true,
+    codeDelivery: "app",
+    passwordRequired: true,
+    passwordHint: "hint",
+    passwordChallenge: {
+      srpId: "42",
+      g: 2,
+      p: "p64",
+      salt1: "s164",
+      salt2: "s264",
+      srpB: "b64",
+    },
+  }));
+
+  await page.goto(`/?state=${initialState}`);
+
+  await expect(page.locator("#session-state")).toHaveText("Telegram code accepted; 2FA password required.");
+  await expect(page.locator("#login-code")).toBeHidden();
+  await expect(page.locator("#password")).toBeVisible();
+  await expect(page.locator("#save-login")).toHaveText("Finish Sign In");
+
+  await page.fill("#password", "hunter2");
+  await page.click("#save-login");
+
+  await expect(page.locator("#status-banner")).toHaveText("Closing to finish sign in.");
+
+  const submitted = await page.evaluate(() => window.__submitted);
+  expect(submitted).toContainEqual({
+    action: "auth:submit-password",
+    state: {
+      phoneNumber: "+15551234567",
+      loginCode: "",
+      password: "",
+      passwordProof: {
+        srpId: "42",
+        A: "A64",
+        M1: "M164",
+      },
+      sendMode: "preview",
+      previewChatMessage: false,
+    },
+  });
 });
 
 test("requires confirmation before clear cache and logout", async ({ page }) => {

@@ -1,9 +1,14 @@
 var tgprotoClient = require("../tgproto/client");
 var tgprotoSender = require("../tgproto/sender");
 var tgprotoPassword = require("../tgproto/password");
+var tgprotoSession = require("../tgproto/session");
+var tl = require("../tgproto/tl");
 
 var NativeTelegramClient = tgprotoClient.NativeTelegramClient;
 var NativeMtProtoSender = tgprotoSender.NativeMtProtoSender;
+var NativeTelegramSession = tgprotoSession.NativeTelegramSession;
+var base64Decode = tgprotoSession.base64Decode;
+var base64Encode = tgprotoSession.base64Encode;
 
 function buildApiCredentials(runtimeConfig) {
   return {
@@ -149,6 +154,139 @@ function readTelegramSessionString(client) {
   return "";
 }
 
+function createPasswordNeededError(message, details) {
+  var error = new Error(message || "2FA password is required for this Telegram account.");
+  var key;
+
+  error.name = "TelegramPasswordNeededError";
+  error.errorMessage = "SESSION_PASSWORD_NEEDED";
+  error.passwordRequired = true;
+  details = details || {};
+  for (key in details) {
+    if (Object.prototype.hasOwnProperty.call(details, key)) {
+      error[key] = details[key];
+    }
+  }
+  return error;
+}
+
+function isPasswordNeededError(error) {
+  return !!(error && (error.passwordRequired === true || error.errorMessage === "SESSION_PASSWORD_NEEDED"));
+}
+
+function nowMs() {
+  return Date.now ? Date.now() : new Date().getTime();
+}
+
+function emitAuthStage(authState, message, extra) {
+  if (authState && typeof authState.authStageLogger === "function") {
+    try {
+      authState.authStageLogger(message, extra || {});
+    } catch (_error) {}
+  }
+}
+
+function fingerprintText(value) {
+  var text = String(value || "");
+  var hash = 5381;
+  var index;
+
+  if (!text) {
+    return "";
+  }
+
+  for (index = 0; index < text.length; index += 1) {
+    hash = ((hash << 5) - hash + text.charCodeAt(index)) >>> 0;
+  }
+
+  return String(text.length) + ":" + ("00000000" + hash.toString(16)).slice(-8);
+}
+
+function describeTelegramSessionString(sessionString) {
+  var sessionValue = String(sessionString || "");
+  var description = {
+    authSessionLength: sessionValue.length,
+    authSessionFp: fingerprintText(sessionValue),
+    authSessionRestored: false,
+    sessionDcId: "",
+    sessionHost: "",
+    sessionPort: "",
+    hasAuthKey: false,
+    authKeyLength: 0,
+    authKeyIdFp: "",
+    serverSaltPresent: false
+  };
+  var session;
+
+  if (!sessionValue) {
+    return description;
+  }
+
+  try {
+    session = new NativeTelegramSession(sessionValue);
+    description.authSessionRestored = true;
+    description.sessionDcId = session.dcId || "";
+    description.sessionHost = session.serverAddress || "";
+    description.sessionPort = session.port || "";
+    description.hasAuthKey = !!(session.authKey && session.authKey.length);
+    description.authKeyLength = session.authKey ? session.authKey.length : 0;
+    description.authKeyIdFp = fingerprintText(session.authKeyId);
+    description.serverSaltPresent = !!String(session.serverSalt || "");
+  } catch (error) {
+    description.authSessionDecodeError = error && error.message ? String(error.message) : "Unable to decode session.";
+  }
+
+  return description;
+}
+
+function bytesToConfigBase64(value) {
+  if (!value) {
+    return "";
+  }
+  return base64Encode(value instanceof Uint8Array ? value : new Uint8Array(value));
+}
+
+function encodePasswordChallenge(passwordInfo) {
+  var algo = passwordInfo && passwordInfo.currentAlgo;
+  var srpB = passwordInfo && (passwordInfo.srpB || passwordInfo.srp_B);
+
+  if (!algo || !algo.p || !algo.salt1 || !algo.salt2 || !srpB || !passwordInfo.srpId) {
+    throw new Error("Telegram password SRP data is incomplete.");
+  }
+
+  return {
+    srpId: String(passwordInfo.srpId),
+    hint: String(passwordInfo.hint || ""),
+    g: Number(algo.g || 0),
+    p: bytesToConfigBase64(algo.p),
+    salt1: bytesToConfigBase64(algo.salt1),
+    salt2: bytesToConfigBase64(algo.salt2),
+    srpB: bytesToConfigBase64(srpB)
+  };
+}
+
+function decodePasswordProof(passwordProof) {
+  passwordProof = passwordProof || {};
+  if (!passwordProof.srpId || !passwordProof.A || !passwordProof.M1) {
+    throw new Error("Telegram 2FA proof is missing.");
+  }
+
+  return tl.Api.InputCheckPasswordSRP({
+    srpId: String(passwordProof.srpId),
+    A: base64Decode(passwordProof.A),
+    M1: base64Decode(passwordProof.M1)
+  });
+}
+
+function buildSessionResult(client, phoneNumber, me) {
+  return {
+    sessionString: client.session.save(),
+    phoneNumber: phoneNumber,
+    accountLabel: formatAccountLabel(me),
+    userId: me && me.id != null ? String(me.id) : ""
+  };
+}
+
 async function requestTelegramLoginCode(runtimeConfig, authState, clientFactory) {
   var nextAuthState = authState || {};
   var phoneNumber = String(nextAuthState.phoneNumber || "").trim();
@@ -190,9 +328,12 @@ async function authorizeTelegramSession(runtimeConfig, authState, clientFactory)
   var loginCode = String(nextAuthState.loginCode || "").trim();
   var password = String(nextAuthState.password || "");
   var phoneCodeHash = String(nextAuthState.phoneCodeHash || "").trim();
+  var authSessionString = String(nextAuthState.authSessionString || "");
   var client;
   var signInResult;
+  var passwordInfo;
   var me;
+  var startedAt;
 
   if (!phoneNumber) {
     throw new Error("Phone number is required.");
@@ -203,50 +344,126 @@ async function authorizeTelegramSession(runtimeConfig, authState, clientFactory)
   }
 
   client = typeof clientFactory === "function"
-    ? clientFactory("")
-    : createTelegramClient(runtimeConfig, "");
+    ? clientFactory(authSessionString)
+    : createTelegramClient(runtimeConfig, authSessionString);
 
   try {
     if (phoneCodeHash) {
+      emitAuthStage(nextAuthState, "Telegram auth connect started", {});
       await ensureTelegramClientConnected(client);
+      emitAuthStage(nextAuthState, "Telegram auth connect done", {});
 
       try {
+        emitAuthStage(nextAuthState, "Telegram auth signIn started", {});
         signInResult = await client.signIn({
           phoneNumber: phoneNumber,
           phoneCodeHash: phoneCodeHash,
           phoneCode: loginCode
         });
+        emitAuthStage(nextAuthState, "Telegram auth signIn done", {});
         me = signInResult && signInResult.user ? signInResult.user : signInResult;
       } catch (error) {
         if (!error || error.errorMessage !== "SESSION_PASSWORD_NEEDED") {
           throw error;
         }
+        emitAuthStage(nextAuthState, "Telegram auth signIn requires 2FA", {});
         if (!password) {
-          throw new Error("2FA password is required for this Telegram account.");
+          emitAuthStage(nextAuthState, "Telegram auth 2FA password info requested", {});
+          passwordInfo = await client.getPasswordInfo();
+          emitAuthStage(nextAuthState, "Telegram auth 2FA password info received", {});
+          throw createPasswordNeededError("2FA password is required for this Telegram account.", {
+            phoneNumber: phoneNumber,
+            phoneCodeHash: phoneCodeHash,
+            authSessionString: readTelegramSessionString(client),
+            passwordHint: String(passwordInfo && passwordInfo.hint ? passwordInfo.hint : ""),
+            passwordChallenge: encodePasswordChallenge(passwordInfo)
+          });
         }
+        emitAuthStage(nextAuthState, "Telegram auth 2FA started", {});
+        startedAt = nowMs();
         me = await client.signInWithPassword(buildApiCredentials(runtimeConfig), {
           password: async function() {
             return password;
+          },
+          onPasswordInfo: async function() {
+            emitAuthStage(nextAuthState, "Telegram auth 2FA password info received", {});
+          },
+          onComputeStart: async function() {
+            startedAt = nowMs();
+            emitAuthStage(nextAuthState, "Telegram auth 2FA SRP compute started", {});
+          },
+          onComputeDone: async function() {
+            emitAuthStage(nextAuthState, "Telegram auth 2FA SRP compute done", {
+              elapsedMs: nowMs() - startedAt
+            });
+          },
+          onCheckStart: async function() {
+            emitAuthStage(nextAuthState, "Telegram auth 2FA checkPassword started", {});
+          },
+          onCheckDone: async function() {
+            emitAuthStage(nextAuthState, "Telegram auth 2FA checkPassword done", {});
           },
           onError: async function(passwordError) {
             throw passwordError;
           }
         });
+        emitAuthStage(nextAuthState, "Telegram auth 2FA done", {});
       }
 
       if (!me) {
+        emitAuthStage(nextAuthState, "Telegram auth getMe started", {});
         me = await client.getMe();
+        emitAuthStage(nextAuthState, "Telegram auth getMe done", {});
       }
 
-      return {
-        sessionString: client.session.save(),
-        phoneNumber: phoneNumber,
-        accountLabel: formatAccountLabel(me),
-        userId: me && me.id != null ? String(me.id) : ""
-      };
+      return buildSessionResult(client, phoneNumber, me);
     }
 
     throw new Error("Request a Telegram login code first.");
+  } finally {
+    if (client && typeof client.disconnect === "function") {
+      await client.disconnect().catch(function() {});
+    }
+  }
+}
+
+async function completeTelegramPasswordAuth(runtimeConfig, authState, clientFactory) {
+  var nextAuthState = authState || {};
+  var phoneNumber = String(nextAuthState.phoneNumber || "").trim();
+  var authSessionString = String(nextAuthState.authSessionString || "");
+  var passwordProof = nextAuthState.passwordProof || null;
+  var client;
+  var me;
+  var passwordCheck;
+
+  if (!phoneNumber) {
+    throw new Error("Phone number is required.");
+  }
+
+  if (!authSessionString) {
+    throw new Error("Telegram 2FA session is missing.");
+  }
+
+  passwordCheck = decodePasswordProof(passwordProof);
+  client = typeof clientFactory === "function"
+    ? clientFactory(authSessionString)
+    : createTelegramClient(runtimeConfig, authSessionString);
+
+  try {
+    emitAuthStage(nextAuthState, "Telegram auth 2FA proof connect started", {});
+    await ensureTelegramClientConnected(client);
+    emitAuthStage(nextAuthState, "Telegram auth 2FA proof connect done", {});
+    emitAuthStage(nextAuthState, "Telegram auth 2FA checkPassword started", {});
+    me = await client.checkPassword(passwordCheck);
+    emitAuthStage(nextAuthState, "Telegram auth 2FA checkPassword done", {});
+
+    if (!me) {
+      emitAuthStage(nextAuthState, "Telegram auth getMe started", {});
+      me = await client.getMe();
+      emitAuthStage(nextAuthState, "Telegram auth getMe done", {});
+    }
+
+    return buildSessionResult(client, phoneNumber, me);
   } finally {
     if (client && typeof client.disconnect === "function") {
       await client.disconnect().catch(function() {});
@@ -274,8 +491,13 @@ async function revokeTelegramSession(runtimeConfig, sessionString, clientFactory
 module.exports = {
   authorizeTelegramSession: authorizeTelegramSession,
   buildTelegramClientParams: buildTelegramClientParams,
+  completeTelegramPasswordAuth: completeTelegramPasswordAuth,
   createTelegramClient: createTelegramClient,
+  describeTelegramSessionString: describeTelegramSessionString,
+  encodePasswordChallenge: encodePasswordChallenge,
+  fingerprintText: fingerprintText,
   formatAccountLabel: formatAccountLabel,
+  isPasswordNeededError: isPasswordNeededError,
   requestTelegramLoginCode: requestTelegramLoginCode,
   revokeTelegramSession: revokeTelegramSession
 };

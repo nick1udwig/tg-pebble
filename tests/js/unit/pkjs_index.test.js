@@ -52,6 +52,8 @@ async function loadPkjsHarness(options = {}) {
     userId: "7",
   };
   const authorizeError = options.authorizeError || null;
+  const passwordAuthResult = options.passwordAuthResult || authorizeResult;
+  const passwordAuthError = options.passwordAuthError || null;
   const requestCodeResult = options.requestCodeResult || {
     phoneNumber: "+15551234567",
     phoneCodeHash: "hash-123",
@@ -82,6 +84,7 @@ async function loadPkjsHarness(options = {}) {
   const authModule = require(authModulePath);
   const adapterModule = require(adapterModulePath);
   const originalAuthorizeTelegramSession = authModule.authorizeTelegramSession;
+  const originalCompleteTelegramPasswordAuth = authModule.completeTelegramPasswordAuth;
   const originalRequestTelegramLoginCode = authModule.requestTelegramLoginCode;
   const originalCreateTelegramAdapter = adapterModule.createTelegramAdapter;
   const authorizeTelegramSession = vi.fn(async () => {
@@ -90,6 +93,13 @@ async function loadPkjsHarness(options = {}) {
     }
 
     return authorizeResult;
+  });
+  const completeTelegramPasswordAuth = vi.fn(async () => {
+    if (passwordAuthError) {
+      throw passwordAuthError;
+    }
+
+    return passwordAuthResult;
   });
   const requestTelegramLoginCode = vi.fn(async () => {
     if (requestCodeError) {
@@ -178,6 +188,7 @@ async function loadPkjsHarness(options = {}) {
   };
 
   authModule.authorizeTelegramSession = authorizeTelegramSession;
+  authModule.completeTelegramPasswordAuth = completeTelegramPasswordAuth;
   authModule.requestTelegramLoginCode = requestTelegramLoginCode;
   adapterModule.createTelegramAdapter = createTelegramAdapter;
 
@@ -189,11 +200,13 @@ async function loadPkjsHarness(options = {}) {
     sentMessages,
     storage,
     authorizeTelegramSession,
+    completeTelegramPasswordAuth,
     requestTelegramLoginCode,
     createTelegramAdapter,
     restore() {
       delete require.cache[indexModulePath];
       authModule.authorizeTelegramSession = originalAuthorizeTelegramSession;
+      authModule.completeTelegramPasswordAuth = originalCompleteTelegramPasswordAuth;
       authModule.requestTelegramLoginCode = originalRequestTelegramLoginCode;
       adapterModule.createTelegramAdapter = originalCreateTelegramAdapter;
 
@@ -291,6 +304,7 @@ describe("PKJS config auth flow", () => {
           loginCode: "12345",
           password: "secret",
           phoneCodeHash: "hash-123",
+          authSessionString: "temp-auth-session",
           sendMode: "auto",
           previewChatMessage: true,
         }),
@@ -374,7 +388,156 @@ describe("PKJS config auth flow", () => {
       );
       expect(harness.authorizeTelegramSession).toHaveBeenCalledWith(
         expect.objectContaining({ apiId: 888001, apiHash: "embedded-hash", source: "embedded" }),
-        expect.objectContaining({ phoneNumber: "+15551234567", loginCode: "12345", phoneCodeHash: "hash-123" }),
+        expect.objectContaining({
+          phoneNumber: "+15551234567",
+          loginCode: "12345",
+          phoneCodeHash: "hash-123",
+          authSessionString: "temp-auth-session",
+        }),
+        expect.any(Function),
+      );
+      expect(JSON.parse(harness.storage.getItem("tg_pebble:session"))).toEqual({
+        sessionString: "saved-session",
+        phoneNumber: "+15551234567",
+        accountLabel: "Alice Example",
+        userId: "7",
+      });
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("stores a password challenge when Telegram accepts the code but requires 2FA", async () => {
+    vi.useFakeTimers();
+
+    const passwordChallenge = {
+      srpId: "42",
+      g: 2,
+      p: "p64",
+      salt1: "s164",
+      salt2: "s264",
+      srpB: "b64",
+    };
+    const passwordNeeded = new Error("2FA password is required for this Telegram account.");
+    passwordNeeded.errorMessage = "SESSION_PASSWORD_NEEDED";
+    passwordNeeded.passwordRequired = true;
+    passwordNeeded.authSessionString = "temp-auth-session-after-code";
+    passwordNeeded.passwordHint = "hint";
+    passwordNeeded.passwordChallenge = passwordChallenge;
+    const harness = await loadPkjsHarness({ authorizeError: passwordNeeded });
+
+    try {
+      harness.storage.setItem("tg_pebble:auth_state", JSON.stringify({
+        errorMessage: "",
+        phoneNumber: "+15551234567",
+        phoneCodeHash: "hash-123",
+        codeDelivery: "app",
+        codeRequestedAt: 1234,
+        telegramWebDcId: 1,
+        telegramWebDcHost: "pluto.web.telegram.org",
+        telegramWebDcPort: 443,
+        forceWSS: true,
+        authSessionString: "temp-auth-session",
+      }));
+      harness.storage.setItem("tg_pebble:session", JSON.stringify({
+        sessionString: "",
+        phoneNumber: "+15551234567",
+        accountLabel: "",
+        userId: "",
+      }));
+      const response = encodeConfigResponse("config:save", {
+        phoneNumber: "+15551234567",
+        loginCode: "12345",
+        password: "",
+        sendMode: "preview",
+        previewChatMessage: false,
+      });
+
+      harness.listeners.get("webviewclosed")({ response });
+      await vi.runAllTimersAsync();
+
+      expect(JSON.parse(harness.storage.getItem("tg_pebble:auth_state"))).toMatchObject({
+        errorMessage: "",
+        phoneNumber: "+15551234567",
+        phoneCodeHash: "hash-123",
+        passwordRequired: true,
+        passwordHint: "hint",
+        passwordChallenge,
+        authSessionString: "temp-auth-session-after-code",
+      });
+      expect(globalThis.Pebble.openURL).toHaveBeenCalledTimes(1);
+      expect(globalThis.Pebble.openURL.mock.calls[0][0]).toContain("passwordRequired");
+    } finally {
+      harness.restore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("finishes password-required auth using a config-page SRP proof", async () => {
+    const harness = await loadPkjsHarness();
+
+    try {
+      harness.storage.setItem("tg_pebble:auth_state", JSON.stringify({
+        errorMessage: "",
+        phoneNumber: "+15551234567",
+        phoneCodeHash: "hash-123",
+        codeDelivery: "app",
+        codeRequestedAt: 1234,
+        telegramWebDcId: 1,
+        telegramWebDcHost: "pluto.web.telegram.org",
+        telegramWebDcPort: 443,
+        forceWSS: true,
+        authSessionString: "temp-auth-session",
+        passwordRequired: true,
+        passwordHint: "hint",
+        passwordChallenge: {
+          srpId: "42",
+          g: 2,
+          p: "p64",
+          salt1: "s164",
+          salt2: "s264",
+          srpB: "b64",
+        },
+      }));
+      harness.storage.setItem("tg_pebble:session", JSON.stringify({
+        sessionString: "",
+        phoneNumber: "+15551234567",
+        accountLabel: "",
+        userId: "",
+      }));
+      const response = encodeConfigResponse("auth:submit-password", {
+        phoneNumber: "+15551234567",
+        loginCode: "",
+        password: "",
+        passwordProof: {
+          srpId: "42",
+          A: "A64",
+          M1: "M164",
+        },
+        sendMode: "preview",
+        previewChatMessage: false,
+      });
+
+      harness.listeners.get("webviewclosed")({ response });
+      await flushAsyncWork();
+
+      expect(harness.completeTelegramPasswordAuth).toHaveBeenCalledWith(
+        expect.objectContaining({
+          telegramWebDcId: 1,
+          telegramWebDcHost: "pluto.web.telegram.org",
+          telegramWebDcPort: 443,
+          forceWSS: true,
+        }),
+        expect.objectContaining({
+          phoneNumber: "+15551234567",
+          passwordProof: {
+            srpId: "42",
+            A: "A64",
+            M1: "M164",
+          },
+          phoneCodeHash: "hash-123",
+          authSessionString: "temp-auth-session",
+        }),
         expect.any(Function),
       );
       expect(JSON.parse(harness.storage.getItem("tg_pebble:session"))).toEqual({
@@ -423,6 +586,9 @@ describe("PKJS config auth flow", () => {
         telegramWebDcPort: 0,
         forceWSS: false,
         authSessionString: "",
+        passwordRequired: false,
+        passwordHint: "",
+        passwordChallenge: null,
       });
       expect(JSON.parse(harness.storage.getItem("tg_pebble:session"))).toEqual({
         sessionString: "",
@@ -504,6 +670,9 @@ describe("PKJS config auth flow", () => {
         telegramWebDcPort: 0,
         forceWSS: false,
         authSessionString: "",
+        passwordRequired: false,
+        passwordHint: "",
+        passwordChallenge: null,
       });
       expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
         payload: "preview|0|0|1",
@@ -580,6 +749,9 @@ describe("PKJS config auth flow", () => {
         telegramWebDcPort: 0,
         forceWSS: false,
         authSessionString: "",
+        passwordRequired: false,
+        passwordHint: "",
+        passwordChallenge: null,
       });
       expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
         payload: "preview|0|0|1",

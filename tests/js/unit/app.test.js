@@ -65,6 +65,9 @@ describe("createPkjsApp", () => {
       authError: "",
       codeRequested: false,
       codeDelivery: "",
+      passwordRequired: false,
+      passwordHint: "",
+      passwordChallenge: null,
     });
   });
 
@@ -99,6 +102,41 @@ describe("createPkjsApp", () => {
       codeDelivery: "app",
     });
     expect(app.getConfigState()).not.toHaveProperty("phoneCodeHash");
+  });
+
+  it("exposes password-required state with only the public SRP challenge", () => {
+    const app = createPkjsApp({ storage: createMemoryStorage() });
+    const passwordChallenge = {
+      srpId: "42",
+      g: 2,
+      p: "p64",
+      salt1: "s164",
+      salt2: "s264",
+      srpB: "b64",
+    };
+
+    app.setSession({ sessionString: "", phoneNumber: "+15551234567" });
+    app.setAuthCodeRequest({
+      phoneNumber: "+15551234567",
+      phoneCodeHash: "hash-123",
+      isCodeViaApp: true,
+      authSessionString: "temp-auth-session",
+    });
+    app.setAuthPasswordRequired({
+      phoneNumber: "+15551234567",
+      passwordHint: "hint",
+      passwordChallenge,
+    });
+
+    expect(app.getConfigState()).toMatchObject({
+      phoneNumber: "+15551234567",
+      codeRequested: true,
+      passwordRequired: true,
+      passwordHint: "hint",
+      passwordChallenge,
+    });
+    expect(app.getConfigState()).not.toHaveProperty("phoneCodeHash");
+    expect(app.getConfigState()).not.toHaveProperty("authSessionString");
   });
 
   it("persists auth errors in config state until a live session is stored", () => {

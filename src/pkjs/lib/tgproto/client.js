@@ -134,6 +134,17 @@ function getMigrationDc(result) {
   return Number.isFinite(dcId) && dcId > 0 ? dcId : 0;
 }
 
+function callHook(callback) {
+  var args;
+
+  if (typeof callback !== "function") {
+    return Promise.resolve();
+  }
+
+  args = Array.prototype.slice.call(arguments, 1);
+  return Promise.resolve(callback.apply(null, args));
+}
+
 NativeTelegramClient.prototype._invoke = function(request, allowMigration) {
   var self = this;
   var wireRequest = request;
@@ -497,23 +508,52 @@ NativeTelegramClient.prototype.signIn = function(params) {
   })).then(normalizeAuthorization);
 };
 
+NativeTelegramClient.prototype.getPasswordInfo = function() {
+  return this.invoke(tl.Api.account.GetPassword({}));
+};
+
+NativeTelegramClient.prototype.checkPassword = function(passwordCheck) {
+  return this.invoke(tl.Api.auth.CheckPassword({
+    password: passwordCheck
+  })).then(normalizeAuthorization);
+};
+
 NativeTelegramClient.prototype.signInWithPassword = function(_apiCredentials, authParams) {
   var self = this;
   var provider = this.options.passwordSrpProvider;
+  authParams = authParams || {};
 
-  return this.invoke(tl.Api.account.GetPassword({})).then(function(passwordInfo) {
+  return this.getPasswordInfo().then(function(passwordInfo) {
     if (!provider || typeof provider.computeCheck !== "function") {
       throw new Error("Native Telegram 2FA SRP provider is not wired yet.");
     }
 
+    return callHook(authParams.onPasswordInfo, passwordInfo).then(function() {
+      return passwordInfo;
+    });
+  }).then(function(passwordInfo) {
     return authParams.password(passwordInfo.hint).then(function(password) {
+      return callHook(authParams.onComputeStart).then(function() {
+        return password;
+      });
+    }).then(function(password) {
       return provider.computeCheck(passwordInfo, password);
+    }).then(function(passwordCheck) {
+      return callHook(authParams.onComputeDone, passwordCheck).then(function() {
+        return passwordCheck;
+      });
     });
   }).then(function(passwordCheck) {
-    return self.invoke(tl.Api.auth.CheckPassword({
-      password: passwordCheck
-    }));
-  }).then(normalizeAuthorization);
+    return callHook(authParams.onCheckStart, passwordCheck).then(function() {
+      return passwordCheck;
+    });
+  }).then(function(passwordCheck) {
+    return self.checkPassword(passwordCheck).then(function(result) {
+      return callHook(authParams.onCheckDone, result).then(function() {
+        return result;
+      });
+    });
+  });
 };
 
 NativeTelegramClient.prototype.getMe = function() {

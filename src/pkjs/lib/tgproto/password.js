@@ -142,14 +142,14 @@ function computeCheck(passwordInfo, password, cryptoProvider) {
     var salt2Sha = results[4];
     var M1;
 
-    return cryptoProvider.sha256(bytes.concatBytes([
+    return Promise.resolve(cryptoProvider.sha256(bytes.concatBytes([
       bigints.xorBytes(pSha, gSha),
       salt1Sha,
       salt2Sha,
       aForHash,
       bForHash,
       K
-    ])).then(function(hash) {
+    ]))).then(function(hash) {
       M1 = hash;
       return tl.Api.InputCheckPasswordSRP({
         srpId: srpId,
