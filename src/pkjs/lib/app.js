@@ -99,7 +99,10 @@ function createPkjsApp(options) {
       accountLabel: String(session.accountLabel || ""),
       authError: String(authState.errorMessage || ""),
       codeRequested: !!authState.phoneCodeHash && !!pendingPhoneNumber && pendingPhoneNumber === sessionPhoneNumber,
-      codeDelivery: String(authState.codeDelivery || "")
+      codeDelivery: String(authState.codeDelivery || ""),
+      passwordRequired: authState.passwordRequired === true,
+      passwordHint: String(authState.passwordHint || ""),
+      passwordChallenge: authState.passwordChallenge || null
     };
   }
 
@@ -330,27 +333,63 @@ function createPkjsApp(options) {
     },
     setAuthCodeRequest: function(request) {
       request = request || {};
+      var codeRequestedAt = Number(request.codeRequestedAt || 0);
+
       return cache.setAuthState({
         errorMessage: "",
         phoneNumber: String(request.phoneNumber || "").trim(),
         phoneCodeHash: String(request.phoneCodeHash || ""),
         codeDelivery: request.isCodeViaApp === true ? "app" : "sms",
-        codeRequestedAt: Date.now()
+        codeRequestedAt: Number.isFinite(codeRequestedAt) && codeRequestedAt > 0 ? codeRequestedAt : Date.now(),
+        telegramWebDcId: request.telegramWebDcId,
+        telegramWebDcHost: request.telegramWebDcHost,
+        telegramWebDcPort: request.telegramWebDcPort,
+        forceWSS: request.forceWSS === true,
+        authSessionString: request.authSessionString,
+        passwordRequired: false,
+        passwordHint: "",
+        passwordChallenge: null
       });
+    },
+    setAuthPasswordRequired: function(request) {
+      request = request || {};
+      var currentAuthState = cache.getAuthState();
+      var codeRequestedAt = Number(request.codeRequestedAt || currentAuthState.codeRequestedAt || 0);
+
+      return cache.setAuthState(Object.assign({}, currentAuthState, {
+        errorMessage: "",
+        phoneNumber: String(request.phoneNumber || currentAuthState.phoneNumber || "").trim(),
+        phoneCodeHash: String(request.phoneCodeHash || currentAuthState.phoneCodeHash || ""),
+        codeDelivery: request.codeDelivery || currentAuthState.codeDelivery || "",
+        codeRequestedAt: Number.isFinite(codeRequestedAt) && codeRequestedAt > 0 ? codeRequestedAt : Date.now(),
+        telegramWebDcId: request.telegramWebDcId || currentAuthState.telegramWebDcId,
+        telegramWebDcHost: request.telegramWebDcHost || currentAuthState.telegramWebDcHost,
+        telegramWebDcPort: request.telegramWebDcPort || currentAuthState.telegramWebDcPort,
+        forceWSS: request.forceWSS === true || currentAuthState.forceWSS === true,
+        authSessionString: request.authSessionString || currentAuthState.authSessionString,
+        passwordRequired: true,
+        passwordHint: String(request.passwordHint || ""),
+        passwordChallenge: request.passwordChallenge || null
+      }));
     },
     getAuthState: function() {
       return cache.getAuthState();
     },
-    getPendingAuthCodeHash: function(phoneNumber) {
+    getPendingAuthRequest: function(phoneNumber) {
       var authState = cache.getAuthState();
       var requestedPhoneNumber = String(authState.phoneNumber || "").trim();
       var nextPhoneNumber = String(phoneNumber || "").trim();
 
       if (!authState.phoneCodeHash || requestedPhoneNumber !== nextPhoneNumber) {
-        return "";
+        return null;
       }
 
-      return String(authState.phoneCodeHash || "");
+      return Object.assign({}, authState);
+    },
+    getPendingAuthCodeHash: function(phoneNumber) {
+      var authState = this.getPendingAuthRequest(phoneNumber);
+
+      return authState ? String(authState.phoneCodeHash || "") : "";
     },
     clearAuthError: function() {
       cache.clearAuthState();

@@ -1,10 +1,10 @@
-var runtime = require("./runtime");
 var messageGroups = require("../message_groups");
 var placeholders = require("../placeholders");
+var tgprotoClient = require("../tgproto/client");
 
-var Api = runtime.Api;
 var addSenderRunMetadata = messageGroups.addSenderRunMetadata;
 var toDisplayText = placeholders.toDisplayText;
+var createInputPeer = tgprotoClient.createInputPeer;
 
 function parseBoolean(value, fallback) {
   if (value === undefined || value === null || value === "") {
@@ -74,31 +74,7 @@ function createRemoteRef(dialog) {
 }
 
 function buildInputPeer(remoteRef) {
-  if (!remoteRef || !remoteRef.peerType || !remoteRef.peerId) {
-    return null;
-  }
-
-  if (remoteRef.peerType === "user") {
-    return new Api.InputPeerUser({
-      userId: remoteRef.peerId,
-      accessHash: remoteRef.accessHash
-    });
-  }
-
-  if (remoteRef.peerType === "chat") {
-    return new Api.InputPeerChat({
-      chatId: remoteRef.peerId
-    });
-  }
-
-  if (remoteRef.peerType === "channel") {
-    return new Api.InputPeerChannel({
-      channelId: remoteRef.peerId,
-      accessHash: remoteRef.accessHash
-    });
-  }
-
-  return null;
+  return createInputPeer(remoteRef);
 }
 
 function formatPreviewFromMessage(message) {

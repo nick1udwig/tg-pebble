@@ -1,3 +1,5 @@
+import { computeTelegramPasswordProof } from "./srp.js";
+
 const STORAGE_KEY = "tg_pebble:config_state";
 
 const DEFAULT_STATE = Object.freeze({
@@ -11,7 +13,25 @@ const DEFAULT_STATE = Object.freeze({
   authError: "",
   codeRequested: false,
   codeDelivery: "",
+  passwordRequired: false,
+  passwordHint: "",
+  passwordChallenge: null,
 });
+
+function sanitizePasswordChallenge(challenge) {
+  if (!challenge || typeof challenge !== "object") {
+    return null;
+  }
+
+  return {
+    srpId: String(challenge.srpId ?? ""),
+    g: Number(challenge.g ?? 0),
+    p: String(challenge.p ?? ""),
+    salt1: String(challenge.salt1 ?? ""),
+    salt2: String(challenge.salt2 ?? ""),
+    srpB: String(challenge.srpB ?? ""),
+  };
+}
 
 function sanitizePersistedState(state) {
   const source = state ?? {};
@@ -25,6 +45,9 @@ function sanitizePersistedState(state) {
     authError: String(source.authError ?? "").trim(),
     codeRequested: source.codeRequested === true,
     codeDelivery: source.codeDelivery === "app" ? "app" : (source.codeDelivery === "sms" ? "sms" : ""),
+    passwordRequired: source.passwordRequired === true,
+    passwordHint: String(source.passwordHint ?? ""),
+    passwordChallenge: sanitizePasswordChallenge(source.passwordChallenge),
   };
 }
 
@@ -112,6 +135,12 @@ function setSessionState(state) {
   }
 
   if (state.codeRequested === true) {
+    if (state.passwordRequired === true) {
+      label.textContent = "Telegram code accepted; 2FA password required.";
+      label.dataset.kind = "success";
+      return;
+    }
+
     label.textContent = state.codeDelivery === "sms"
       ? "Login code requested by SMS."
       : "Login code requested in Telegram.";
@@ -134,12 +163,22 @@ function readFormState() {
 }
 
 function writeFormState(state) {
+  const passwordRequired = state.passwordRequired === true;
+
   document.querySelector("#phone-number").value = state.phoneNumber;
   document.querySelector("#login-code").value = state.loginCode;
   document.querySelector("#password").value = state.password;
   document.querySelector(`#send-mode-${state.sendMode}`)?.setAttribute("checked", "checked");
   document.querySelector(`#send-mode-${state.sendMode}`)?.click();
   document.querySelector("#preview-chat-message").checked = state.previewChatMessage === true;
+  document.querySelector("#login-code-label").classList.toggle("hidden", passwordRequired);
+  document.querySelector("#login-code").classList.toggle("hidden", passwordRequired);
+  document.querySelector("#password-label").classList.toggle("hidden", !passwordRequired);
+  document.querySelector("#password").classList.toggle("hidden", !passwordRequired);
+  document.querySelector("#password").placeholder = state.passwordHint
+    ? `Telegram two-step password; hint: ${state.passwordHint}`
+    : "Telegram two-step password";
+  document.querySelector("#save-login").textContent = passwordRequired ? "Finish Sign In" : "Save / Sign In";
   setSessionState(state);
 }
 
@@ -153,7 +192,9 @@ function setInitialStatus(state) {
     state.hasSession
       ? "Current PKJS session loaded."
       : (
-        state.codeRequested
+        state.passwordRequired
+          ? "Enter your Telegram 2FA password to finish sign in."
+          : state.codeRequested
           ? "Enter the login code from Telegram, then sign in."
           : "Save changes to update settings or request a login code."
       ),
@@ -207,8 +248,44 @@ function bootstrap() {
     getBridge().submit({ action: "auth:request-code", state: nextState });
   });
 
-  document.querySelector("#save-login").addEventListener("click", () => {
+  document.querySelector("#save-login").addEventListener("click", async () => {
     const nextState = readFormState();
+
+    if (currentState.passwordRequired === true) {
+      if (!nextState.phoneNumber) {
+        setStatus("Phone number is required to finish sign in.", "error");
+        return;
+      }
+      if (!nextState.password) {
+        setStatus("Enter your Telegram 2FA password.", "error");
+        return;
+      }
+      if (!currentState.passwordChallenge) {
+        setStatus("Telegram 2FA challenge is missing. Request a new login code.", "error");
+        return;
+      }
+
+      try {
+        setStatus("Preparing Telegram 2FA proof.", "info");
+        const passwordProof = await computeTelegramPasswordProof(currentState.passwordChallenge, nextState.password);
+        currentState = { ...currentState, ...nextState, password: "", authError: "" };
+        saveState(currentState);
+        getBridge().submit({
+          action: "auth:submit-password",
+          state: {
+            ...nextState,
+            loginCode: "",
+            password: "",
+            passwordProof,
+          },
+        });
+        setStatus("Closing to finish sign in.", "success");
+      } catch (error) {
+        setStatus(error?.message || "Telegram 2FA proof failed.", "error");
+      }
+      return;
+    }
+
     currentState = { ...currentState, ...nextState, authError: "" };
     saveState(currentState);
     getBridge().submit({ action: "config:save", state: nextState });

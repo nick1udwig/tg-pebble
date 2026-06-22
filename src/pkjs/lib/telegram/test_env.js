@@ -1,8 +1,10 @@
-var runtime = require("./runtime");
+var auth = require("./auth");
+var tgprotoClient = require("../tgproto/client");
+var tl = require("../tgproto/tl");
 
-var Api = runtime.Api;
-var TelegramClient = runtime.TelegramClient;
-var StringSession = runtime.StringSession;
+var Api = tl.Api;
+var createTelegramClient = auth.createTelegramClient;
+var createInputPeer = tgprotoClient.createInputPeer;
 
 var REQUIRED_ENV_KEYS = Object.freeze([
   "TG_API_ID",
@@ -133,7 +135,7 @@ function canRunTelegramTestEnv(config) {
 
 function createTelegramTestClient(config, sessionString) {
   var savedSession = sessionString || "";
-  var client;
+  var runtimeConfig;
 
   if (!Number.isFinite(config.apiId)) {
     throw new Error("TG_API_ID must be set to a valid integer.");
@@ -143,32 +145,22 @@ function createTelegramTestClient(config, sessionString) {
     throw new Error("TG_API_HASH must be set.");
   }
 
-  client = new TelegramClient(new StringSession(savedSession), config.apiId, config.apiHash, {
+  runtimeConfig = {
+    apiId: config.apiId,
+    apiHash: config.apiHash,
     connectionRetries: config.connectionRetries,
     requestRetries: config.requestRetries,
     reconnectRetries: config.reconnectRetries,
-    useWSS: config.useWSS,
+    forceWSS: config.useWSS,
     testServers: config.testServers
-  });
-
+  };
   if (config.forceDcId && config.forceServerAddress && config.forcePort) {
-    var originalGetDc = client.getDC.bind(client);
-
-    client.session.setDC(config.forceDcId, config.forceServerAddress, config.forcePort);
-    client.getDC = async function(dcId, downloadDC, web) {
-      if (dcId === config.forceDcId && !downloadDC && !web) {
-        return {
-          id: config.forceDcId,
-          ipAddress: config.forceServerAddress,
-          port: config.forcePort
-        };
-      }
-
-      return originalGetDc(dcId, downloadDC, web);
-    };
+    runtimeConfig.telegramWebDcId = config.forceDcId;
+    runtimeConfig.telegramWebDcHost = config.forceServerAddress;
+    runtimeConfig.telegramWebDcPort = config.forcePort;
   }
 
-  return client;
+  return createTelegramClient(runtimeConfig, savedSession);
 }
 
 function isExistingAccountError(error) {
@@ -199,7 +191,7 @@ async function sendTelegramTestCode(client, config) {
 }
 
 async function signUpTelegramTestUser(client, config, phoneCodeHash) {
-  return client.invoke(new Api.auth.SignUp({
+  return client.invoke(Api.auth.SignUp({
     phoneNumber: config.phoneNumber,
     phoneCodeHash: phoneCodeHash,
     firstName: config.firstName,
@@ -208,11 +200,11 @@ async function signUpTelegramTestUser(client, config, phoneCodeHash) {
 }
 
 async function signInTelegramTestUser(client, config, phoneCodeHash) {
-  return client.invoke(new Api.auth.SignIn({
+  return client.signIn({
     phoneNumber: config.phoneNumber,
     phoneCodeHash: phoneCodeHash,
     phoneCode: config.phoneCode
-  }));
+  });
 }
 
 async function loginTelegramTestUser(client, config) {
@@ -236,7 +228,7 @@ async function loginTelegramTestUser(client, config) {
   }
 
   signInResult = await signInTelegramTestUser(client, config, phoneCodeHash);
-  if (signInResult instanceof Api.auth.AuthorizationSignUpRequired) {
+  if (signInResult && signInResult.tlName === "auth.authorizationSignUpRequired") {
     if (signUpError) {
       throw signUpError;
     }
@@ -271,8 +263,30 @@ async function getTelegramDialogMessages(client, entity, options) {
 }
 
 async function resolveTelegramPeer(client, peer) {
+  var peerValue = peer || "";
+  var parsed;
+
   await ensureTelegramTestClientConnected(client);
-  return client.getInputEntity(peer || "me");
+
+  if (peerValue && typeof peerValue === "object") {
+    return createInputPeer(peerValue) || peerValue;
+  }
+
+  try {
+    parsed = JSON.parse(String(peerValue));
+    return createInputPeer(parsed) || parsed;
+  } catch (_error) {}
+
+  parsed = String(peerValue).match(/^(user|chat|channel):([^:]+)(?::([^:]+))?$/);
+  if (parsed) {
+    return createInputPeer({
+      peerType: parsed[1],
+      peerId: parsed[2],
+      accessHash: parsed[3] || ""
+    });
+  }
+
+  throw new Error("Native Telegram peer resolution requires a cached peer ref, JSON peer ref, or user:/chat:/channel: peer id.");
 }
 
 async function sendTelegramTextMessage(client, peer, text) {
@@ -283,7 +297,7 @@ async function sendTelegramTextMessage(client, peer, text) {
 }
 
 async function logoutTelegramTestUser(client) {
-  await client.invoke(new Api.auth.LogOut());
+  await client.logOut();
 }
 
 async function disconnectTelegramTestClient(client) {

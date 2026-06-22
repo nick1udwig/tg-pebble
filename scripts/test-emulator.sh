@@ -122,7 +122,6 @@ rm -f "${transcribe_log}" \
   "${dictation_listening_ppm}" "${dictation_preview_ppm}" "${dictation_sent_ppm}" "${dictation_failed_ppm}" "${send_failed_ppm}" \
   "${chat_list_png}" "${chat_open_png}" \
   "${dictation_listening_png}" "${dictation_preview_png}" "${dictation_sent_png}" "${dictation_failed_png}" "${send_failed_png}"
-./scripts/build-telegram-runtime.sh >/dev/null
 TG_PEBBLE_FIXTURE_MODE="${fixture_mode}" npm run build:pkjs-legacy >/dev/null
 pebble build >/dev/null
 env TG_PEBBLE_SKIP_APP_INSTALL="${skip_app_install}" \

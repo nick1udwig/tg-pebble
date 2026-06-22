@@ -223,7 +223,7 @@ Reference docs:
 For a real throwaway Telegram account, the safe default is:
 
 - `TG_TEST_SERVERS=0`
-- `TG_SESSION_STRING=<saved authorized gramjs session>`
+- `TG_SESSION_STRING=<saved authorized native TG2 session>`
 - do not set `TG_TEST_ALLOW_SEND_CODE=1`
 - keep `TG_TEST_ALLOW_LOGOUT=0`
 
@@ -264,44 +264,11 @@ Do not use `me` / Saved Messages here. The live probe showed Telegram rejects th
 
 Each send uses a unique prefix/timestamp marker and verifies that the message appears in recent history. The default `test:telegram` command still runs this suite, but the mutation tests remain skipped unless you explicitly enable them.
 
-#### Create A Saved Session String
+#### Saved Session Strings
 
-To create `TG_SESSION_STRING` for a live throwaway account:
+`TG_SESSION_STRING` now expects the native `TG2.` session format. There is no standalone session generator until native auth-key generation is complete.
 
-1. Set these variables in [`.env.telegram.test`](/root/git/tg-pebble/.env.telegram.test):
-
-```bash
-TG_TEST_ENABLE=1
-TG_TEST_SERVERS=0
-TG_API_ID=...
-TG_API_HASH=...
-TG_TEST_USE_WSS=1
-```
-
-2. Load the env file and run:
-
-```bash
-set -a
-source ./.env.telegram.test
-set +a
-npm run telegram:session
-```
-
-3. Enter:
-
-- the phone number for the throwaway real Telegram account
-- the login code
-- the 2FA password if the account has one
-
-4. Copy the printed line:
-
-```bash
-TG_SESSION_STRING=...
-```
-
-into [`.env.telegram.test`](/root/git/tg-pebble/.env.telegram.test).
-
-5. Keep these production-safe settings:
+Keep these production-safe settings:
 
 ```bash
 TG_TEST_SERVERS=0
@@ -381,19 +348,8 @@ This should build the app for the configured rectangular platforms and emit a `.
 
 That command:
 
-- refreshes the Telegram runtime bundle through the sibling builder project when available
 - refreshes the generated legacy PKJS tree
 - invokes `pebble build`
-
-The default sibling builder path is:
-
-- `../tg-pebble-telegram-builder`
-
-Override it with:
-
-- `TG_PEBBLE_TELEGRAM_BUILDER_DIR=/abs/path/to/builder`
-
-If the sibling builder is absent but `src/pkjs/lib/telegram/runtime_bundle.js` already exists, the script reuses the checked-in artifact.
 
 ### 4.6 Run The Automated Emulator Smoke Test
 
@@ -488,14 +444,6 @@ TG_SESSION_STRING=...
 npm run run:emulator:live:window -- basalt
 ```
 
-You can create `TG_SESSION_STRING` with:
-
-```bash
-TG_API_ID=...
-TG_API_HASH=...
-npm run telegram:session
-```
-
 Notes:
 
 - `run:emulator:live` sets `TG_PEBBLE_FIXTURE_MODE=0`, so PKJS does not seed fixture chats.
@@ -506,7 +454,6 @@ Notes:
 - the first live launch after a storage reset requires `TG_API_ID` and `TG_API_HASH`; after that, you can preserve the seeded runtime config by setting `TG_PEBBLE_EMULATOR_RESET_APP_STORAGE=0`.
 - `npm run test:emulator` remains fixture-backed on purpose.
 - emulator wrapper commands now skip Pebble phone logs by default because current `pebble-tool` log translation crashes on JS sourcemaps; set `TG_PEBBLE_EMULATOR_PHONE_LOGS=1` if you explicitly want `--logs`.
-- `npm run build:telegram-runtime` uses the checked-in runtime bundle by default; use `npm run build:telegram-runtime:force` when you intentionally want to rebuild it from the sibling builder project.
 
 ```bash
 bash scripts/start-qemu-pkjs-session.sh basalt build/tg-pebble.pbw build/tests/emulator-session.json
@@ -1011,8 +958,6 @@ npm run test:js
 npm run test:c
 npm run test:config
 npm test
-npm run build:telegram-runtime
-npm run build:telegram-runtime:force
 npm run build:watch
 ```
 
