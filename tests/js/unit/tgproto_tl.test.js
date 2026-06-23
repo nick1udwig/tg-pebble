@@ -4,7 +4,13 @@ import pako from "pako";
 import { ByteReader, ByteWriter, bytesFromHex, bytesToHex } from "../../../src/pkjs/lib/tgproto/bytes.js";
 import { NativeTelegramClient } from "../../../src/pkjs/lib/tgproto/client.js";
 import { base64Decode, base64Encode, NativeTelegramSession, SESSION_PREFIX } from "../../../src/pkjs/lib/tgproto/session.js";
-import { Api, deserializeObject, GZIP_PACKED_CONSTRUCTOR_ID, serializeObject } from "../../../src/pkjs/lib/tgproto/tl.js";
+import {
+  Api,
+  deserializeObject,
+  deserializeResult,
+  GZIP_PACKED_CONSTRUCTOR_ID,
+  serializeObject,
+} from "../../../src/pkjs/lib/tgproto/tl.js";
 
 describe("tgproto TL codec", () => {
   it("serializes auth.sendCode with CodeSettings", () => {
@@ -100,6 +106,32 @@ describe("tgproto TL codec", () => {
     expect(() => deserializeObject(serializeObject(object).slice(0, -1))).toThrow(
       /TL read failed at auth\.sentCode\.phoneCodeHash/
     );
+  });
+
+  it("rejects trailing bytes after a top-level TL object", () => {
+    const object = Api.auth.SentCode({
+      type: Api.auth.SentCodeTypeApp({ length: 5 }),
+      phoneCodeHash: "phone-hash",
+    });
+    const payload = new Uint8Array([...serializeObject(object), 0]);
+
+    expect(() => deserializeObject(payload)).toThrow(/Trailing TL bytes after object: 1/);
+  });
+
+  it("rejects trailing bytes after an RPC result", () => {
+    const request = Api.auth.SendCode({
+      phoneNumber: "+15551234567",
+      apiId: 123456,
+      apiHash: "hash",
+      settings: Api.CodeSettings({}),
+    });
+    const result = Api.auth.SentCode({
+      type: Api.auth.SentCodeTypeApp({ length: 5 }),
+      phoneCodeHash: "phone-hash",
+    });
+    const payload = new Uint8Array([...serializeObject(result), 0]);
+
+    expect(() => deserializeResult(request, payload)).toThrow(/Trailing TL bytes after auth.sendCode result: 1/);
   });
 
   it("keeps MTProto auth string fields as raw bytes", () => {

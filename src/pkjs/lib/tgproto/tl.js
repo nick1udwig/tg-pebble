@@ -601,13 +601,29 @@ function readObject(reader) {
   return readBareObjectDef(reader, def);
 }
 
+function assertFullyRead(reader, context) {
+  var remaining = reader.remaining();
+
+  if (remaining > 0) {
+    throw new Error("Trailing TL bytes after " + context + ": " + remaining);
+  }
+}
+
 function deserializeObject(data) {
-  return readObject(new bytes.ByteReader(data));
+  var reader = new bytes.ByteReader(data);
+  var object = readObject(reader);
+
+  assertFullyRead(reader, "object");
+  return object;
 }
 
 function deserializeResult(request, data) {
   var def = getDefinition(getObjectName(request));
-  return readType(new bytes.ByteReader(data), def.result || "Object");
+  var reader = new bytes.ByteReader(data);
+  var result = readType(reader, def.result || "Object");
+
+  assertFullyRead(reader, def.tlName + " result");
+  return result;
 }
 
 function createApiNamespace(namespace) {
