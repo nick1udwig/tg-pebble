@@ -63,6 +63,28 @@ describe("telegram adapter mapping", () => {
     });
   });
 
+  it("maps Telegram sticker documents to the sticker placeholder", () => {
+    const messages = mapMessages([
+      {
+        id: 1,
+        out: false,
+        senderId: "42",
+        sender: { firstName: "Alice" },
+        document: {
+          attributes: [
+            { className: "documentAttributeSticker" },
+          ],
+        },
+      },
+    ]);
+
+    expect(messages[0]).toMatchObject({
+      senderName: "Alice",
+      text: "Sticker",
+      showSender: true,
+    });
+  });
+
   it("groups outgoing messages as self even when Telegram reports the peer sender id", () => {
     const messages = mapMessages([
       {

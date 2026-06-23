@@ -103,6 +103,25 @@ function formatPreviewFromMessage(message) {
   });
 }
 
+function hasDocumentAttribute(document, attributeName) {
+  var attributes = document && document.attributes;
+  var index;
+  var name;
+
+  if (!attributes || !attributes.length) {
+    return false;
+  }
+
+  for (index = 0; index < attributes.length; index += 1) {
+    name = attributes[index] && (attributes[index].tlName || attributes[index].className);
+    if (name === attributeName || name === attributeName.charAt(0).toUpperCase() + attributeName.slice(1)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function inferMessageKind(message) {
   if (!message) {
     return "";
@@ -125,6 +144,9 @@ function inferMessageKind(message) {
   }
 
   if (message.document) {
+    if (hasDocumentAttribute(message.document, "documentAttributeSticker")) {
+      return "sticker";
+    }
     return "file";
   }
 
