@@ -123,6 +123,13 @@ static void test_parse_chat_item_payload_truncates_to_valid_utf8(void) {
   ASSERT_TRUE(strncmp(item.preview, "Login code: 31792.", 18) == 0);
 }
 
+static void test_parse_chat_item_payload_rejects_overflowing_numbers(void) {
+  TgParsedChatItem item;
+
+  ASSERT_TRUE(!tg_parse_chat_item_payload("2147483648|Alice|See you soon|2", &item));
+  ASSERT_TRUE(!tg_parse_chat_item_payload("1001|Alice|See you soon|4294967296", &item));
+}
+
 static void test_parse_message_item_payload(void) {
   TgParsedMessageItem item;
 
@@ -205,6 +212,7 @@ int main(void) {
   test_sync_status_label();
   test_parse_chat_item_payload();
   test_parse_chat_item_payload_truncates_to_valid_utf8();
+  test_parse_chat_item_payload_rejects_overflowing_numbers();
   test_parse_message_item_payload();
   test_parse_message_item_payload_truncates_to_valid_utf8();
   test_parse_send_result_payload();

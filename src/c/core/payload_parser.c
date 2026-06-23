@@ -103,6 +103,7 @@ static void prv_set_default_auth_step(TgParsedSettingsState *out) {
 static bool prv_parse_uint_field(const char *field, uint32_t *out) {
   uint32_t value = 0;
   size_t index = 0;
+  uint32_t digit = 0;
 
   if (!field || !field[0] || !out) {
     return false;
@@ -113,7 +114,12 @@ static bool prv_parse_uint_field(const char *field, uint32_t *out) {
       return false;
     }
 
-    value = (value * 10U) + (uint32_t)(field[index] - '0');
+    digit = (uint32_t)(field[index] - '0');
+    if (value > (UINT32_MAX - digit) / 10U) {
+      return false;
+    }
+
+    value = (value * 10U) + digit;
     index += 1;
   }
 
@@ -139,7 +145,8 @@ bool tg_parse_chat_item_payload(const char *payload, TgParsedChatItem *out) {
     return false;
   }
 
-  if (!prv_parse_uint_field(id_buffer, &chat_id) || !prv_parse_uint_field(unread_buffer, &unread_count)) {
+  if (!prv_parse_uint_field(id_buffer, &chat_id) || chat_id > (uint32_t)INT32_MAX ||
+      !prv_parse_uint_field(unread_buffer, &unread_count)) {
     return false;
   }
 
