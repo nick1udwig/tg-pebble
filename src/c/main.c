@@ -21,6 +21,7 @@
 #define TG_MSG_CHAT_LIST_COMPLETE "chat_list_complete"
 #define TG_MSG_MESSAGE_ITEM "message_item"
 #define TG_MSG_CHAT_PAGE_COMPLETE "chat_page_complete"
+#define TG_MSG_CHAT_PAGE_ERROR "chat_page_error"
 #define TG_MSG_SYNC_STATUS "sync_status"
 #define TG_MSG_SETTINGS_STATE "settings_state"
 #define TG_MSG_TOGGLE_SEND_MODE "toggle_send_mode"
@@ -88,6 +89,8 @@ static TgChatItem s_chats[TG_MAX_CHATS];
 static TgMessageItem s_messages[TG_MAX_MESSAGES];
 static size_t s_chat_count = 0;
 static size_t s_message_count = 0;
+static bool s_chat_page_loaded = false;
+static char s_chat_page_error[TG_STATUS_TEXT_LENGTH] = "";
 
 static int32_t s_active_chat_id = -1;
 static char s_active_chat_title[TG_CHAT_TITLE_LENGTH] = "Chat";
@@ -420,6 +423,8 @@ static void prv_clear_chat_items(void) {
 static void prv_clear_message_items(void) {
   memset(s_messages, 0, sizeof(s_messages));
   s_message_count = 0;
+  s_chat_page_loaded = false;
+  s_chat_page_error[0] = '\0';
   if (s_chat_menu_layer) {
     menu_layer_reload_data(s_chat_menu_layer);
   }
@@ -655,6 +660,14 @@ static void prv_chat_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex 
   (void)context;
 
   if (s_message_count == 0) {
+    if (s_chat_page_error[0] != '\0') {
+      menu_cell_basic_draw(ctx, cell_layer, "Load failed", s_chat_page_error, NULL);
+      return;
+    }
+    if (s_chat_page_loaded) {
+      menu_cell_basic_draw(ctx, cell_layer, "No messages", "Nothing to show", NULL);
+      return;
+    }
     menu_cell_basic_draw(ctx, cell_layer, "Loading chat", "Waiting for recent messages", NULL);
     return;
   }
@@ -1071,6 +1084,7 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
     TgParsedMessageItem parsed;
 
     if (request_id < TG_MAX_MESSAGES && tg_parse_message_item_payload(payload, &parsed)) {
+      s_chat_page_error[0] = '\0';
       s_messages[request_id].show_sender = parsed.show_sender;
       s_messages[request_id].outgoing = parsed.outgoing;
       prv_copy_string(s_messages[request_id].sender, sizeof(s_messages[request_id].sender), parsed.sender);
@@ -1086,12 +1100,24 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
   }
 
   if (strcmp(type, TG_MSG_CHAT_PAGE_COMPLETE) == 0) {
+    s_chat_page_loaded = true;
+    s_chat_page_error[0] = '\0';
     if (s_chat_menu_layer) {
       menu_layer_reload_data(s_chat_menu_layer);
       if (s_message_count > 0) {
         menu_layer_set_selected_index(s_chat_menu_layer, MenuIndex(0, (int)(s_message_count - 1)),
                                       MenuRowAlignBottom, false);
       }
+    }
+    return;
+  }
+
+  if (strcmp(type, TG_MSG_CHAT_PAGE_ERROR) == 0) {
+    s_chat_page_loaded = true;
+    prv_copy_string(s_chat_page_error, sizeof(s_chat_page_error),
+                    payload && payload[0] != '\0' ? payload : "Telegram request failed.");
+    if (s_chat_menu_layer) {
+      menu_layer_reload_data(s_chat_menu_layer);
     }
     return;
   }

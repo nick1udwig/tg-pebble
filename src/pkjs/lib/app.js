@@ -11,6 +11,10 @@ var SyncEvent = syncStateLib.SyncEvent;
 var SyncState = syncStateLib.SyncState;
 var reduceSyncState = syncStateLib.reduceSyncState;
 
+function getErrorMessage(error, fallback) {
+  return String(error && (error.errorMessage || error.message) || fallback || "Telegram request failed.");
+}
+
 function createPkjsApp(options) {
   var storage = options.storage;
   var transport = options.transport || null;
@@ -261,6 +265,8 @@ function createPkjsApp(options) {
       var adapter = getTelegramAdapter();
       var ref = getChatRef(chatId);
       var result;
+      var errorMessage = "";
+      var payload;
 
       ensureFixtureCache();
 
@@ -274,11 +280,16 @@ function createPkjsApp(options) {
           });
           updateMessagePage(chatId, mergeOptimisticTail(cachedMessages, result.messages || []));
         } catch (error) {
+          errorMessage = getErrorMessage(error, "Chat load failed.");
           logger("hydrateChatPage failed", error);
         }
       }
 
-      return buildCurrentChatPagePayload(chatId);
+      payload = buildCurrentChatPagePayload(chatId);
+      if (errorMessage) {
+        payload.errorMessage = errorMessage;
+      }
+      return payload;
     },
     refreshStarted: function() {
       return this.setSyncState(SyncEvent.refreshStart);

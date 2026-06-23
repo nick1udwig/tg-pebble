@@ -238,6 +238,49 @@ describe("createPkjsApp", () => {
     });
   });
 
+  it("reports Telegram chat page hydrate errors", async () => {
+    const logMessages = [];
+    const app = createPkjsApp({
+      storage: createMemoryStorage(),
+      fixtureMode: false,
+      initialSession: { sessionString: "live-session" },
+      logger(message, extra) {
+        logMessages.push([message, extra]);
+      },
+      telegramAdapterFactory() {
+        return {
+          isConfigured() {
+            return true;
+          },
+          async hydrateChatList() {
+            return {
+              chats: [{ id: 7, remoteId: "user:42", title: "Live Alice", preview: "Latest", unreadCount: 1 }],
+              chatRefs: {
+                7: { peerKey: "user:42", peerType: "user", peerId: "42", accessHash: "123" },
+              },
+            };
+          },
+          async hydrateChatPage() {
+            const error = new Error("PEER_ID_INVALID");
+            error.errorMessage = "PEER_ID_INVALID";
+            throw error;
+          },
+        };
+      },
+    });
+
+    await app.bootstrap();
+
+    expect(await app.getChatPage(7)).toMatchObject({
+      chatId: 7,
+      messages: [],
+      errorMessage: "PEER_ID_INVALID",
+    });
+    expect(logMessages).toEqual([
+      ["hydrateChatPage failed", expect.objectContaining({ errorMessage: "PEER_ID_INVALID" })],
+    ]);
+  });
+
   it("replaces a cached fixture session when a live session is provided", async () => {
     const storage = createMemoryStorage();
     const fixtureApp = createPkjsApp({ storage });

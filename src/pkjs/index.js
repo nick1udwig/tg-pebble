@@ -11,6 +11,7 @@ var encodeMessage = protocol.encodeMessage;
 var MessageType = protocol.MessageType;
 var loadTelegramRuntimeConfig = runtimeConfigLib.loadTelegramRuntimeConfig;
 var serializeChatItem = protocol.serializeChatItem;
+var serializeChatPageError = protocol.serializeChatPageError;
 var serializeMessageItem = protocol.serializeMessageItem;
 var serializeSettingsState = protocol.serializeSettingsState;
 var serializeSendResult = protocol.serializeSendResult;
@@ -282,7 +283,10 @@ var app = createPkjsApp({
     return createTelegramAdapter({
       enabled: true,
       sessionString: session && session.sessionString ? session.sessionString : "",
-      clientFactory: telegramClientFactory
+      clientFactory: telegramClientFactory,
+      logger: function(message, extra) {
+        log(message, extra);
+      }
     });
   } : null
 });
@@ -1079,6 +1083,17 @@ async function sendChatPage(chatId) {
   var messages = payload.messages || [];
 
   sendEnvelope(MessageType.syncStatus, "", 0, SyncState.syncing, function() {
+    if (payload.errorMessage) {
+      app.refreshFailed();
+      sendEnvelope(
+        MessageType.chatPageError,
+        serializeChatPageError({ detail: payload.errorMessage }),
+        0,
+        SyncState.desynced
+      );
+      return;
+    }
+
     sendMessageItems(
       messages,
       0,

@@ -9,6 +9,7 @@ var MessageType = Object.freeze({
   chatListComplete: "chat_list_complete",
   messageItem: "message_item",
   chatPageComplete: "chat_page_complete",
+  chatPageError: "chat_page_error",
   syncStatus: "sync_status",
   settingsState: "settings_state",
   toggleSendMode: "toggle_send_mode",
@@ -31,6 +32,7 @@ var ProtocolByteLimit = Object.freeze({
   chatPreview: 63,
   messageSender: 23,
   messageText: 95,
+  chatPageErrorDetail: 95,
   sendResultDetail: 95
 });
 
@@ -186,6 +188,10 @@ function serializeMessageItem(message) {
   ].join("|");
 }
 
+function serializeChatPageError(error) {
+  return sanitizeField(error && error.detail ? error.detail : "Chat load failed.", ProtocolByteLimit.chatPageErrorDetail);
+}
+
 function serializeSendResult(result) {
   if (result.ok) {
     return "ok";
@@ -214,6 +220,7 @@ module.exports = {
   buildChatPagePayload: buildChatPagePayload,
   encodeMessage: encodeMessage,
   serializeChatItem: serializeChatItem,
+  serializeChatPageError: serializeChatPageError,
   serializeMessageItem: serializeMessageItem,
   serializeSettingsState: serializeSettingsState,
   serializeSendResult: serializeSendResult,

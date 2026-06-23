@@ -10,6 +10,7 @@ import {
   MessageType,
   ProtocolByteLimit,
   serializeChatItem,
+  serializeChatPageError,
   serializeMessageItem,
   serializeSettingsState,
   serializeSendResult,
@@ -77,6 +78,7 @@ describe("watch/pkjs protocol fixtures", () => {
       serializeMessageItem({ senderName: "Alice", showSender: true, outgoing: false, text: "Morning" }),
     ).toBe("Alice|1|0|Morning");
 
+    expect(serializeChatPageError({ detail: "PEER_ID_INVALID" })).toBe("PEER_ID_INVALID");
     expect(serializeSendResult({ ok: true })).toBe("ok");
     expect(serializeSendResult({ ok: false, detail: "Fixture transport rejected the message." })).toBe(
       "error|Fixture transport rejected the message.",
@@ -123,6 +125,7 @@ describe("watch/pkjs protocol fixtures", () => {
       text: longText,
     });
     const sendResultPayload = serializeSendResult({ ok: false, detail: longError });
+    const chatPageErrorPayload = serializeChatPageError({ detail: longError });
 
     const [chatId, title, preview, unreadCount] = chatPayload.split("|");
     const [sender, showSender, outgoing, text] = messagePayload.split("|");
@@ -137,12 +140,14 @@ describe("watch/pkjs protocol fixtures", () => {
     expect(utf8ByteLength(preview)).toBeLessThanOrEqual(ProtocolByteLimit.chatPreview);
     expect(utf8ByteLength(sender)).toBeLessThanOrEqual(ProtocolByteLimit.messageSender);
     expect(utf8ByteLength(text)).toBeLessThanOrEqual(ProtocolByteLimit.messageText);
+    expect(utf8ByteLength(chatPageErrorPayload)).toBeLessThanOrEqual(ProtocolByteLimit.chatPageErrorDetail);
     expect(utf8ByteLength(errorDetail)).toBeLessThanOrEqual(ProtocolByteLimit.sendResultDetail);
 
     expect(title.endsWith(emoji)).toBe(false);
     expect(preview.endsWith(emoji)).toBe(false);
     expect(sender.endsWith(emoji)).toBe(false);
     expect(text.endsWith(emoji)).toBe(false);
+    expect(chatPageErrorPayload.endsWith(emoji)).toBe(false);
     expect(errorDetail.endsWith(emoji)).toBe(false);
   });
 });

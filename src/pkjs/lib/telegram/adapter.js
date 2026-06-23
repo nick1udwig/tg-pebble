@@ -77,6 +77,19 @@ function buildInputPeer(remoteRef) {
   return createInputPeer(remoteRef);
 }
 
+function describeRemoteRef(remoteRef, inputPeer) {
+  var peerId = String(remoteRef && remoteRef.peerId || "");
+  var accessHash = String(remoteRef && remoteRef.accessHash || "");
+
+  return {
+    peerType: String(remoteRef && remoteRef.peerType || ""),
+    peerIdLength: String(peerId.length),
+    hasAccessHash: accessHash.length > 0,
+    accessHashLength: String(accessHash.length),
+    inputPeerClassName: String(inputPeer && inputPeer.className || "")
+  };
+}
+
 function formatPreviewFromMessage(message) {
   if (!message) {
     return "";
@@ -235,9 +248,11 @@ function mapMessages(messages) {
 }
 
 function createTelegramAdapter(options) {
+  options = options || {};
   var clientFactory = options.clientFactory;
   var sessionString = String(options.sessionString || "");
   var enabled = parseBoolean(options.enabled, true);
+  var logger = typeof options.logger === "function" ? options.logger : function() {};
 
   async function withClient(handler) {
     var client;
@@ -277,7 +292,22 @@ function createTelegramAdapter(options) {
       params = params || {};
       return withClient(async function(client) {
         var inputPeer = buildInputPeer(params.remoteRef);
-        var messages = await client.getMessages(inputPeer, { limit: params.limit || 20 });
+        var refSummary = describeRemoteRef(params.remoteRef, inputPeer);
+        var messages;
+
+        refSummary.chatId = String(params.chatId || "");
+        logger("Telegram chat page hydrate started", refSummary);
+        if (!inputPeer) {
+          throw new Error("Missing Telegram peer for chat.");
+        }
+
+        messages = await client.getMessages(inputPeer, { limit: params.limit || 20 });
+        logger("Telegram chat page hydrate succeeded", {
+          chatId: String(params.chatId || ""),
+          peerType: refSummary.peerType,
+          hasAccessHash: refSummary.hasAccessHash,
+          messageCount: String(messages && messages.length || 0)
+        });
         return {
           chatId: params.chatId,
           messages: mapMessages(messages)
