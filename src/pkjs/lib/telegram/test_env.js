@@ -32,6 +32,24 @@ function parseInteger(value) {
   return parseIntegerValue(value);
 }
 
+function uniqueStrings(values) {
+  var result = [];
+  var seen = {};
+  var index;
+  var value;
+
+  values = values || [];
+  for (index = 0; index < values.length; index += 1) {
+    value = String(values[index]);
+    if (!Object.prototype.hasOwnProperty.call(seen, value)) {
+      seen[value] = true;
+      result.push(value);
+    }
+  }
+
+  return result;
+}
+
 function loadTelegramTestEnv(env) {
   var source = env || process.env;
   var apiId = parseInteger(source.TG_API_ID);
@@ -48,9 +66,9 @@ function loadTelegramTestEnv(env) {
   var errors = [];
   var key;
 
-  for (key of REQUIRED_ENV_KEYS) {
-    if (!source[key]) {
-      missing.push(key);
+  for (key = 0; key < REQUIRED_ENV_KEYS.length; key += 1) {
+    if (!source[REQUIRED_ENV_KEYS[key]]) {
+      missing.push(REQUIRED_ENV_KEYS[key]);
     }
   }
 
@@ -126,7 +144,7 @@ function loadTelegramTestEnv(env) {
     forceDcId: isFiniteNumber(forceDcId) ? forceDcId : null,
     forceServerAddress: String(source.TG_TEST_FORCE_SERVER_ADDRESS || ""),
     forcePort: isFiniteNumber(forcePort) ? forcePort : null,
-    missing: Array.from(new Set(missing)),
+    missing: uniqueStrings(missing),
     errors: errors
   };
 }

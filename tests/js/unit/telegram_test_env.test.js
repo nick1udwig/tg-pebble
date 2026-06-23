@@ -49,6 +49,27 @@ describe("telegram test env config", () => {
     expect(canRunTelegramTestEnv(config)).toBe(false);
   });
 
+  it("deduplicates missing keys when ES6 collection helpers are unavailable", () => {
+    const originalSet = globalThis.Set;
+    const originalArrayFrom = Array.from;
+    let config;
+
+    try {
+      globalThis.Set = undefined;
+      Array.from = undefined;
+      config = loadTelegramTestEnv({
+        TG_API_ID: "",
+        TG_API_HASH: "",
+      });
+    } finally {
+      globalThis.Set = originalSet;
+      Array.from = originalArrayFrom;
+    }
+
+    expect(config.missing.filter((key) => key === "TG_API_ID")).toHaveLength(1);
+    expect(config.missing).toContain("TG_API_HASH");
+  });
+
   it("rejects production send tests without a real target dialog", () => {
     const config = loadTelegramTestEnv({
       TG_TEST_ENABLE: "1",
