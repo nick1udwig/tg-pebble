@@ -26,8 +26,19 @@ describe("tgproto byte primitives", () => {
 
   it("round-trips signed 64-bit decimal values", () => {
     expect(bytesLEToInt64(int64ToBytesLE("9223372036854775807"), true)).toBe("9223372036854775807");
+    expect(bytesLEToInt64(int64ToBytesLE("-9223372036854775808"), true)).toBe("-9223372036854775808");
     expect(bytesLEToInt64(int64ToBytesLE("-1"), true)).toBe("-1");
     expect(bytesToHex(int64ToBytesLE("72623859790382856"))).toBe("0807060504030201");
+  });
+
+  it("round-trips unsigned 64-bit wire values", () => {
+    expect(bytesLEToInt64(int64ToBytesLE("18446744073709551615"), false)).toBe("18446744073709551615");
+    expect(bytesLEToInt64(int64ToBytesLE("18446744073709551615"), true)).toBe("-1");
+  });
+
+  it("rejects 64-bit decimal values outside the wire range", () => {
+    expect(() => int64ToBytesLE("18446744073709551616")).toThrow(/64-bit/);
+    expect(() => int64ToBytesLE("-9223372036854775809")).toThrow(/64-bit/);
   });
 
   it("encodes long TL byte arrays with padding", () => {

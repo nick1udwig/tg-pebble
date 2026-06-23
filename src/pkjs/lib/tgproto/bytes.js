@@ -222,10 +222,42 @@ function bytesLEToDecimal(bytes, signed) {
   return negative && digits !== "0" ? "-" + digits : digits;
 }
 
+function compareDecimalStrings(left, right) {
+  var a = String(left || "0").replace(/^0+/, "") || "0";
+  var b = String(right || "0").replace(/^0+/, "") || "0";
+
+  if (a.length !== b.length) {
+    return a.length < b.length ? -1 : 1;
+  }
+
+  if (a === b) {
+    return 0;
+  }
+
+  return a < b ? -1 : 1;
+}
+
+function assertInt64WireRange(value) {
+  var decimal = String(value == null ? "0" : value).trim();
+  var negative = decimal[0] === "-";
+  var digits = negative ? decimal.slice(1) : decimal;
+  var max = negative ? "9223372036854775808" : "18446744073709551615";
+
+  if (!/^\d+$/.test(digits)) {
+    throw new Error("Invalid decimal integer: " + decimal);
+  }
+
+  if (compareDecimalStrings(digits, max) > 0) {
+    throw new Error("Decimal integer is outside the 64-bit wire range: " + decimal);
+  }
+}
+
 function int64ToBytesLE(value) {
   var out;
   var big;
   var index;
+
+  assertInt64WireRange(value);
 
   if (typeof BigInt === "function") {
     big = BigInt(value == null ? 0 : value);
