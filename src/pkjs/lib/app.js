@@ -1,6 +1,7 @@
 var cacheStoreLib = require("./cache_store");
 var fixturesLib = require("./fixtures");
 var numberLib = require("./number");
+var objectLib = require("./object");
 var protocol = require("./protocol");
 var syncStateLib = require("./sync_state");
 
@@ -8,6 +9,7 @@ var createCacheStore = cacheStoreLib.createCacheStore;
 var createFixtureState = fixturesLib.createFixtureState;
 var buildChatListPagePayload = protocol.buildChatListPagePayload;
 var buildChatPagePayload = protocol.buildChatPagePayload;
+var assign = objectLib.assign;
 var isFiniteNumber = numberLib.isFiniteNumber;
 var SyncEvent = syncStateLib.SyncEvent;
 var SyncState = syncStateLib.SyncState;
@@ -347,7 +349,7 @@ function createPkjsApp(options) {
         });
       }
 
-      return cache.setAuthState(Object.assign({}, currentAuthState, {
+      return cache.setAuthState(assign({}, currentAuthState, {
         errorMessage: nextMessage
       }));
     },
@@ -376,7 +378,7 @@ function createPkjsApp(options) {
       var currentAuthState = cache.getAuthState();
       var codeRequestedAt = Number(request.codeRequestedAt || currentAuthState.codeRequestedAt || 0);
 
-      return cache.setAuthState(Object.assign({}, currentAuthState, {
+      return cache.setAuthState(assign({}, currentAuthState, {
         errorMessage: "",
         phoneNumber: String(request.phoneNumber || currentAuthState.phoneNumber || "").trim(),
         phoneCodeHash: String(request.phoneCodeHash || currentAuthState.phoneCodeHash || ""),
@@ -404,7 +406,7 @@ function createPkjsApp(options) {
         return null;
       }
 
-      return Object.assign({}, authState);
+      return assign({}, authState);
     },
     getPendingAuthCodeHash: function(phoneNumber) {
       var authState = this.getPendingAuthRequest(phoneNumber);

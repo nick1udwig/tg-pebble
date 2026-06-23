@@ -1,7 +1,9 @@
 var protocol = require("./protocol");
 var numberLib = require("./number");
+var objectLib = require("./object");
 
 var ProtocolByteLimit = protocol.ProtocolByteLimit;
+var assign = objectLib.assign;
 var truncateUtf8 = protocol.truncateUtf8;
 var utf8ByteLength = protocol.utf8ByteLength;
 var isFiniteNumber = numberLib.isFiniteNumber;
@@ -140,7 +142,7 @@ function fitChatListWithinBudget(chats) {
     }
 
     if (longestPreviewIndex >= 0 && longestPreviewLength > 0) {
-      nextChats[longestPreviewIndex] = Object.assign({}, nextChats[longestPreviewIndex], {
+      nextChats[longestPreviewIndex] = assign({}, nextChats[longestPreviewIndex], {
         preview: truncateUtf8(nextChats[longestPreviewIndex].preview, longestPreviewLength - 1)
       });
       continue;
@@ -161,7 +163,7 @@ function normalizeChatList(chats) {
 
   for (index = 0; index < chats.length; index += 1) {
     chat = chats[index] || {};
-    nextChats.push(Object.assign({}, chat, {
+    nextChats.push(assign({}, chat, {
       title: normalizeChatText(chat.title, ProtocolByteLimit.chatTitle),
       preview: normalizeChatText(chat.preview, ProtocolByteLimit.chatPreview)
     }));
@@ -268,7 +270,7 @@ function createCacheStore(storage, options) {
       return mergeSettings(getJson(CACHE_KEYS.settings, {}));
     },
     setSettings: function(settings) {
-      return setJson(CACHE_KEYS.settings, mergeSettings(Object.assign({}, this.getSettings(), settings)));
+      return setJson(CACHE_KEYS.settings, mergeSettings(assign({}, this.getSettings(), settings)));
     },
     getChatList: function() {
       return getJson(CACHE_KEYS.chatList, []);

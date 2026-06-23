@@ -1,6 +1,7 @@
 var appLib = require("./lib/app");
 var configPageLib = require("./lib/config_page");
 var numberLib = require("./lib/number");
+var objectLib = require("./lib/object");
 var protocol = require("./lib/protocol");
 var runtimeConfigLib = require("./lib/runtime_config");
 var syncStateLib = require("./lib/sync_state");
@@ -12,6 +13,7 @@ var encodeMessage = protocol.encodeMessage;
 var MessageType = protocol.MessageType;
 var loadTelegramRuntimeConfig = runtimeConfigLib.loadTelegramRuntimeConfig;
 var isFiniteNumber = numberLib.isFiniteNumber;
+var assign = objectLib.assign;
 var serializeChatItem = protocol.serializeChatItem;
 var serializeChatPageError = protocol.serializeChatPageError;
 var serializeMessageItem = protocol.serializeMessageItem;
@@ -136,7 +138,7 @@ function buildAuthRequestDebug(authRequest) {
     phoneCodeHashFp: fingerprintText(phoneCodeHash)
   };
 
-  return Object.assign(details, describeTelegramSessionString(request.authSessionString));
+  return assign(details, describeTelegramSessionString(request.authSessionString));
 }
 
 function buildAuthAttemptDebug(authRequest, state) {
@@ -144,7 +146,7 @@ function buildAuthAttemptDebug(authRequest, state) {
   var loginCode = String(nextState.loginCode || "").trim();
   var passwordProof = nextState.passwordProof || {};
 
-  return Object.assign(buildAuthRequestDebug(authRequest), {
+  return assign(buildAuthRequestDebug(authRequest), {
     loginCodeLength: loginCode.length,
     loginCodeNumeric: /^[0-9]+$/.test(loginCode),
     hasPassword: String(nextState.password || "").length > 0,
@@ -577,7 +579,7 @@ function runWebSocketExperimentCase(testCase, trigger, index, total) {
 
     socket.onopen = function(event) {
       opened = true;
-      log("WebSocket experiment case opened", addSocketState(Object.assign(describeWebSocketEvent(event), {
+      log("WebSocket experiment case opened", addSocketState(assign(describeWebSocketEvent(event), {
         label: testCase.label
       }), socket));
       if (testCase.sendMode !== "echo") {
@@ -1157,7 +1159,7 @@ async function handleConfigSave(state) {
       log("Telegram config auth attempt", buildAuthAttemptDebug(pendingAuthRequest, nextState));
       app.setSession(await authorizeTelegramSession(
         resolvedRuntimeConfig,
-        Object.assign({}, nextState, {
+        assign({}, nextState, {
           phoneCodeHash: pendingAuthRequest.phoneCodeHash,
           authSessionString: pendingAuthRequest.authSessionString,
           authStageLogger: function(message, extra) {
@@ -1171,7 +1173,7 @@ async function handleConfigSave(state) {
       await sendChatList();
     } catch (error) {
       if (isPasswordNeededError(error) && error.passwordChallenge) {
-        log("Telegram config auth requires 2FA", Object.assign(
+        log("Telegram config auth requires 2FA", assign(
           buildAuthRequestDebug(pendingAuthRequest),
           {
             passwordHintPresent: !!error.passwordHint,
@@ -1181,7 +1183,7 @@ async function handleConfigSave(state) {
             passwordChallengeBFp: fingerprintText(error.passwordChallenge.srpB || "")
           }
         ));
-        app.setAuthPasswordRequired(Object.assign({}, pendingAuthRequest, {
+        app.setAuthPasswordRequired(assign({}, pendingAuthRequest, {
           phoneNumber: nextState.phoneNumber,
           authSessionString: error.authSessionString || pendingAuthRequest.authSessionString,
           passwordHint: error.passwordHint || "",
@@ -1256,7 +1258,7 @@ async function handleSubmitPasswordProof(state) {
     log("Telegram config 2FA auth attempt", buildAuthAttemptDebug(pendingAuthRequest, nextState));
     app.setSession(await completeTelegramPasswordAuth(
       resolvedRuntimeConfig,
-      Object.assign({}, nextState, {
+      assign({}, nextState, {
         phoneCodeHash: pendingAuthRequest.phoneCodeHash,
         authSessionString: pendingAuthRequest.authSessionString,
         authStageLogger: function(message, extra) {
@@ -1312,7 +1314,7 @@ async function handleRequestLoginCode(state) {
     codeRequest.codeRequestedAt = Date.now();
     resolvedRuntimeConfig = await resolveTelegramRuntimeConfigForAuthRequest(resolvedRuntimeConfig, codeRequest);
     applyTelegramRuntimeConfig(resolvedRuntimeConfig);
-    log("Telegram login code request succeeded", Object.assign({
+    log("Telegram login code request succeeded", assign({
       isCodeViaApp: codeRequest.isCodeViaApp === true
     }, buildAuthRequestDebug(codeRequest)));
     app.setAuthCodeRequest(codeRequest);

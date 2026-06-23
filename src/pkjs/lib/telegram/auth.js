@@ -4,6 +4,7 @@ var tgprotoPassword = require("../tgproto/password");
 var tgprotoSession = require("../tgproto/session");
 var tl = require("../tgproto/tl");
 var numberLib = require("../number");
+var objectLib = require("../object");
 
 var NativeTelegramClient = tgprotoClient.NativeTelegramClient;
 var NativeMtProtoSender = tgprotoSender.NativeMtProtoSender;
@@ -11,6 +12,7 @@ var NativeTelegramSession = tgprotoSession.NativeTelegramSession;
 var base64Decode = tgprotoSession.base64Decode;
 var base64Encode = tgprotoSession.base64Encode;
 var isFiniteNumber = numberLib.isFiniteNumber;
+var assign = objectLib.assign;
 
 function buildApiCredentials(runtimeConfig) {
   return {
@@ -311,7 +313,7 @@ async function requestTelegramLoginCode(runtimeConfig, authState, clientFactory)
       throw new Error("Failed to retrieve Telegram phone code hash.");
     }
 
-    return Object.assign({
+    return assign({
       phoneNumber: phoneNumber,
       phoneCodeHash: sendCodeResult.phoneCodeHash,
       isCodeViaApp: sendCodeResult.isCodeViaApp === true,

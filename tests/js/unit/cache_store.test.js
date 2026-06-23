@@ -31,6 +31,20 @@ describe("createCacheStore", () => {
     expect(store.getSettings()).toEqual({ sendMode: "auto", previewChatMessage: true });
   });
 
+  it("persists settings when Object.assign is unavailable", () => {
+    const originalAssign = Object.assign;
+    const store = createCacheStore(createMemoryStorage());
+
+    try {
+      Object.assign = undefined;
+      store.setSettings({ sendMode: "auto" });
+
+      expect(store.getSettings()).toEqual({ sendMode: "auto", previewChatMessage: false });
+    } finally {
+      Object.assign = originalAssign;
+    }
+  });
+
   it("normalizes pending auth code state", () => {
     const store = createCacheStore(createMemoryStorage());
 

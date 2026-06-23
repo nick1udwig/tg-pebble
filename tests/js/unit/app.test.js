@@ -166,6 +166,41 @@ describe("createPkjsApp", () => {
     expect(app.getConfigState()).not.toHaveProperty("authSessionString");
   });
 
+  it("updates auth state when Object.assign is unavailable", () => {
+    const originalAssign = Object.assign;
+    const app = createPkjsApp({ storage: createMemoryStorage() });
+
+    try {
+      Object.assign = undefined;
+      app.setSession({ sessionString: "", phoneNumber: "+15551234567" });
+      app.setAuthCodeRequest({
+        phoneNumber: "+15551234567",
+        phoneCodeHash: "hash-123",
+        isCodeViaApp: true,
+      });
+      app.setAuthPasswordRequired({
+        phoneNumber: "+15551234567",
+        passwordHint: "hint",
+        passwordChallenge: {
+          srpId: "42",
+          g: 2,
+          p: "p64",
+          salt1: "s164",
+          salt2: "s264",
+          srpB: "b64",
+        },
+      });
+
+      expect(app.getPendingAuthRequest("+15551234567")).toMatchObject({
+        phoneCodeHash: "hash-123",
+        passwordRequired: true,
+        passwordHint: "hint",
+      });
+    } finally {
+      Object.assign = originalAssign;
+    }
+  });
+
   it("persists auth errors in config state until a live session is stored", () => {
     const app = createPkjsApp({ storage: createMemoryStorage() });
 
