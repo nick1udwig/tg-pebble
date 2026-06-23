@@ -352,7 +352,7 @@ ByteReader.prototype.readRaw = function(length) {
   var end;
   var value;
 
-  if (size < 0 || Math.floor(size) !== size) {
+  if (!isFinite(size) || size < 0 || Math.floor(size) !== size) {
     throw new Error("Raw read length must be a non-negative integer.");
   }
 

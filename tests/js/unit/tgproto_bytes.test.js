@@ -55,6 +55,7 @@ describe("tgproto byte primitives", () => {
     const reader = new ByteReader(new Uint8Array([1, 2, 3]));
 
     expect(() => reader.readRaw(-1)).toThrow(/non-negative/);
+    expect(() => reader.readRaw(Infinity)).toThrow(/non-negative/);
     expect(reader.remaining()).toBe(3);
   });
 });
