@@ -355,6 +355,11 @@ function attachMessageSender(message, entities) {
   return message;
 }
 
+function isEmptyMessage(message) {
+  var name = message && (message.tlName || message.className);
+  return name === "messageEmpty" || name === "MessageEmpty";
+}
+
 function indexMessages(result, entities) {
   var messages = {};
   var list = result && result.messages ? result.messages : [];
@@ -363,8 +368,14 @@ function indexMessages(result, entities) {
   var key;
 
   for (index = 0; index < list.length; index += 1) {
+    if (isEmptyMessage(list[index])) {
+      continue;
+    }
     message = attachMessageSender(list[index], entities);
     key = getPeerKey(message.peerId || message.peer_id) + ":" + String(message.id);
+    if (!key || key.indexOf(":") === 0) {
+      continue;
+    }
     messages[key] = message;
   }
 
@@ -411,6 +422,9 @@ function normalizeMessages(result) {
   var index;
 
   for (index = 0; index < list.length; index += 1) {
+    if (isEmptyMessage(list[index])) {
+      continue;
+    }
     out.push(attachMessageSender(list[index], entities));
   }
 

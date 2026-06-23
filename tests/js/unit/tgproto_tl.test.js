@@ -368,4 +368,43 @@ describe("native Telegram client facade", () => {
       },
     ]);
   });
+
+  it("skips empty message placeholders when normalizing history", async () => {
+    const sender = {
+      connect: vi.fn(async () => {}),
+      disconnect: vi.fn(async () => {}),
+      invoke: vi.fn(async () => Api.messages.Messages({
+        messages: [
+          Api.MessageEmpty({ id: 8 }),
+          Api.Message({
+            id: 9,
+            peerId: Api.PeerUser({ userId: "42" }),
+            date: 1,
+            message: "Actual hello",
+          }),
+        ],
+        chats: [],
+        users: [
+          Api.User({
+            id: "42",
+            accessHash: "99",
+            firstName: "Alice",
+          }),
+        ],
+      })),
+    };
+    const client = new NativeTelegramClient({ sender });
+
+    await expect(client.getMessages({
+      className: "InputPeerUser",
+      userId: "42",
+      accessHash: "99",
+    }, { limit: 5 })).resolves.toEqual([
+      expect.objectContaining({
+        id: 9,
+        message: "Actual hello",
+        senderId: "42",
+      }),
+    ]);
+  });
 });
