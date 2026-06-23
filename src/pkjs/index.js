@@ -232,6 +232,26 @@ function createTelegramClientFactory(config, defaultSessionString) {
   };
 }
 
+function getAuthStep(configState) {
+  if (configState.hasSession === true) {
+    return "signed_in";
+  }
+
+  if (configState.authError) {
+    return "error";
+  }
+
+  if (configState.passwordRequired === true) {
+    return "password";
+  }
+
+  if (configState.codeRequested === true) {
+    return "code";
+  }
+
+  return "phone";
+}
+
 function buildSettingsStatePayload() {
   var settingsState = app.getSettingsState();
   var configState = app.getConfigState();
@@ -240,7 +260,8 @@ function buildSettingsStatePayload() {
     sendMode: settingsState.sendMode,
     previewChatMessage: settingsState.previewChatMessage === true,
     hasSession: configState.hasSession === true,
-    hasAuthError: !!configState.authError
+    hasAuthError: !!configState.authError,
+    authStep: getAuthStep(configState)
   };
 }
 
@@ -1291,7 +1312,13 @@ async function handleLogoutAction() {
   app.logout();
   sendEnvelope(
     MessageType.settingsState,
-    serializeSettingsState({ sendMode: "preview", previewChatMessage: false, hasSession: false, hasAuthError: false }),
+    serializeSettingsState({
+      sendMode: "preview",
+      previewChatMessage: false,
+      hasSession: false,
+      hasAuthError: false,
+      authStep: "phone"
+    }),
     0,
     SyncState.desynced,
     function() {

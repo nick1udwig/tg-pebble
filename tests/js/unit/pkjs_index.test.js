@@ -285,6 +285,11 @@ describe("PKJS config auth flow", () => {
         forceWSS: true,
         authSessionString: "temp-auth-session",
       });
+      expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
+        payload: "auto|1|0|0|code",
+        requestId: 0,
+        syncState: "desynced",
+      });
 
       harness.listeners.get("webviewclosed")({ response });
       await flushAsyncWork();
@@ -322,7 +327,7 @@ describe("PKJS config auth flow", () => {
       ]);
 
       expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
-        payload: "auto|1|1|0",
+        payload: "auto|1|1|0|signed_in",
         requestId: 0,
         syncState: "syncing",
       });
@@ -465,6 +470,11 @@ describe("PKJS config auth flow", () => {
         passwordChallenge,
         authSessionString: "temp-auth-session-after-code",
       });
+      expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
+        payload: "preview|0|0|0|password",
+        requestId: 0,
+        syncState: "desynced",
+      });
       expect(globalThis.Pebble.openURL).toHaveBeenCalledTimes(1);
       expect(globalThis.Pebble.openURL.mock.calls[0][0]).toContain("passwordRequired");
     } finally {
@@ -597,7 +607,7 @@ describe("PKJS config auth flow", () => {
         userId: "",
       });
       expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
-        payload: "preview|0|0|1",
+        payload: "preview|0|0|1|error",
         requestId: 0,
         syncState: "desynced",
       });
@@ -634,7 +644,7 @@ describe("PKJS config auth flow", () => {
         userId: "",
       });
       expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
-        payload: "auto|1|0|0",
+        payload: "auto|1|0|0|phone",
         requestId: 0,
         syncState: "desynced",
       });
@@ -675,7 +685,7 @@ describe("PKJS config auth flow", () => {
         passwordChallenge: null,
       });
       expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
-        payload: "preview|0|0|1",
+        payload: "preview|0|0|1|error",
         requestId: 0,
         syncState: "desynced",
       });
@@ -754,7 +764,7 @@ describe("PKJS config auth flow", () => {
         passwordChallenge: null,
       });
       expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
-        payload: "preview|0|0|1",
+        payload: "preview|0|0|1|error",
         requestId: 0,
         syncState: "desynced",
       });

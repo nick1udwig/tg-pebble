@@ -9,6 +9,7 @@
 #define TG_MESSAGE_SENDER_LENGTH 24
 #define TG_MESSAGE_TEXT_LENGTH 96
 #define TG_STATUS_TEXT_LENGTH 96
+#define TG_AUTH_STEP_LENGTH 16
 
 typedef struct {
   int32_t chat_id;
@@ -34,6 +35,7 @@ typedef struct {
   bool preview_chat_message;
   bool has_session;
   bool has_auth_error;
+  char auth_step[TG_AUTH_STEP_LENGTH];
 } TgParsedSettingsState;
 
 bool tg_parse_chat_item_payload(const char *payload, TgParsedChatItem *out);

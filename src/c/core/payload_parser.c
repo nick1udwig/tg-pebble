@@ -84,6 +84,22 @@ static bool prv_parse_bool_field(const char *field) {
   return field && field[0] == '1';
 }
 
+static void prv_set_default_auth_step(TgParsedSettingsState *out) {
+  const char *step = "phone";
+
+  if (!out) {
+    return;
+  }
+
+  if (out->has_session) {
+    step = "signed_in";
+  } else if (out->has_auth_error) {
+    step = "error";
+  }
+
+  prv_copy_field(out->auth_step, sizeof(out->auth_step), step, strlen(step));
+}
+
 static bool prv_parse_uint_field(const char *field, uint32_t *out) {
   uint32_t value = 0;
   size_t index = 0;
@@ -185,6 +201,7 @@ bool tg_parse_settings_state_payload(const char *payload, TgParsedSettingsState 
   char preview_buffer[4];
   char session_buffer[4];
   char auth_error_buffer[4];
+  char auth_step_buffer[TG_AUTH_STEP_LENGTH];
 
   if (!payload || !out) {
     return false;
@@ -206,6 +223,7 @@ bool tg_parse_settings_state_payload(const char *payload, TgParsedSettingsState 
     out->preview_chat_message = false;
     out->has_session = false;
     out->has_auth_error = false;
+    prv_set_default_auth_step(out);
     return true;
   }
 
@@ -213,15 +231,23 @@ bool tg_parse_settings_state_payload(const char *payload, TgParsedSettingsState 
   if (!prv_next_field(&cursor, session_buffer, sizeof(session_buffer))) {
     out->has_session = false;
     out->has_auth_error = false;
+    prv_set_default_auth_step(out);
     return true;
   }
 
   out->has_session = prv_parse_bool_field(session_buffer);
   if (!prv_next_field(&cursor, auth_error_buffer, sizeof(auth_error_buffer))) {
     out->has_auth_error = false;
+    prv_set_default_auth_step(out);
     return true;
   }
 
   out->has_auth_error = prv_parse_bool_field(auth_error_buffer);
+  if (!prv_next_field(&cursor, auth_step_buffer, sizeof(auth_step_buffer)) || auth_step_buffer[0] == '\0') {
+    prv_set_default_auth_step(out);
+    return true;
+  }
+
+  prv_copy_field(out->auth_step, sizeof(out->auth_step), auth_step_buffer, strlen(auth_step_buffer));
   return true;
 }

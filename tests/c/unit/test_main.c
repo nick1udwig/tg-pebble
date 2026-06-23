@@ -165,12 +165,24 @@ static void test_parse_send_result_payload(void) {
   ASSERT_TRUE(settings.preview_chat_message);
   ASSERT_TRUE(!settings.has_session);
   ASSERT_TRUE(!settings.has_auth_error);
+  ASSERT_STREQ("phone", settings.auth_step);
 
   ASSERT_TRUE(tg_parse_settings_state_payload("preview|0|1|1", &settings));
   ASSERT_TRUE(!settings.is_auto_send);
   ASSERT_TRUE(!settings.preview_chat_message);
   ASSERT_TRUE(settings.has_session);
   ASSERT_TRUE(settings.has_auth_error);
+  ASSERT_STREQ("signed_in", settings.auth_step);
+
+  ASSERT_TRUE(tg_parse_settings_state_payload("preview|0|0|1", &settings));
+  ASSERT_TRUE(!settings.has_session);
+  ASSERT_TRUE(settings.has_auth_error);
+  ASSERT_STREQ("error", settings.auth_step);
+
+  ASSERT_TRUE(tg_parse_settings_state_payload("preview|0|0|0|password", &settings));
+  ASSERT_TRUE(!settings.has_session);
+  ASSERT_TRUE(!settings.has_auth_error);
+  ASSERT_STREQ("password", settings.auth_step);
 }
 
 static void test_parse_send_result_payload_truncates_to_valid_utf8(void) {

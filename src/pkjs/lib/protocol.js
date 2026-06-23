@@ -195,11 +195,14 @@ function serializeSendResult(result) {
 }
 
 function serializeSettingsState(settings) {
+  var authStep = settings.authStep || (settings.hasSession ? "signed_in" : (settings.hasAuthError ? "error" : "phone"));
+
   return [
     sanitizeField(settings.sendMode),
     settings.previewChatMessage ? "1" : "0",
     settings.hasSession ? "1" : "0",
-    settings.hasAuthError ? "1" : "0"
+    settings.hasAuthError ? "1" : "0",
+    sanitizeField(authStep)
   ].join("|");
 }
 

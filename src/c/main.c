@@ -44,6 +44,15 @@ typedef struct {
   char text[TG_MESSAGE_TEXT_LENGTH];
 } TgMessageItem;
 
+typedef enum {
+  TgAuthStepUnknown = 0,
+  TgAuthStepPhone,
+  TgAuthStepCode,
+  TgAuthStepPassword,
+  TgAuthStepError,
+  TgAuthStepSignedIn
+} TgAuthStep;
+
 static Window *s_chat_list_window;
 static Window *s_chat_window;
 static Window *s_preview_window;
@@ -92,6 +101,7 @@ static bool s_preview_chat_message = false;
 static bool s_has_received_inbox = false;
 static bool s_has_session = false;
 static bool s_has_auth_error = false;
+static TgAuthStep s_auth_step = TgAuthStepUnknown;
 static TgSyncStatus s_sync_status = TG_SYNC_STATUS_SYNCING;
 static AppTimer *s_sync_status_timer = NULL;
 static size_t s_sync_status_frame = 0;
@@ -103,6 +113,41 @@ static void prv_request_chat_page(int32_t chat_id);
 static void prv_schedule_bootstrap(uint32_t delay_ms);
 static void prv_copy_string(char *dest, size_t dest_size, const char *src);
 
+static TgAuthStep prv_auth_step_from_string(const char *value) {
+  if (!value) {
+    return TgAuthStepPhone;
+  }
+
+  if (strcmp(value, "code") == 0) {
+    return TgAuthStepCode;
+  }
+  if (strcmp(value, "password") == 0) {
+    return TgAuthStepPassword;
+  }
+  if (strcmp(value, "error") == 0) {
+    return TgAuthStepError;
+  }
+  if (strcmp(value, "signed_in") == 0) {
+    return TgAuthStepSignedIn;
+  }
+
+  return TgAuthStepPhone;
+}
+
+static bool prv_auth_step_needs_attention(TgAuthStep step) {
+  return step == TgAuthStepCode || step == TgAuthStepPassword;
+}
+
+static void prv_set_auth_step_from_string(const char *value) {
+  TgAuthStep next_step = prv_auth_step_from_string(value);
+
+  if (next_step != s_auth_step && prv_auth_step_needs_attention(next_step)) {
+    vibes_short_pulse();
+  }
+
+  s_auth_step = next_step;
+}
+
 static void prv_chat_list_zero_state(char *title, size_t title_size, char *subtitle, size_t subtitle_size) {
   if (!s_has_received_inbox || s_sync_status == TG_SYNC_STATUS_SYNCING) {
     prv_copy_string(title, title_size, "Loading chats");
@@ -110,15 +155,27 @@ static void prv_chat_list_zero_state(char *title, size_t title_size, char *subti
     return;
   }
 
-  if (!s_has_session && s_has_auth_error) {
+  if (!s_has_session && (s_has_auth_error || s_auth_step == TgAuthStepError)) {
     prv_copy_string(title, title_size, "Sign-in failed");
-    prv_copy_string(subtitle, subtitle_size, "Retry in phone config");
+    prv_copy_string(subtitle, subtitle_size, "Retry phone settings");
+    return;
+  }
+
+  if (!s_has_session && s_auth_step == TgAuthStepCode) {
+    prv_copy_string(title, title_size, "Enter login code");
+    prv_copy_string(subtitle, subtitle_size, "Open phone settings");
+    return;
+  }
+
+  if (!s_has_session && s_auth_step == TgAuthStepPassword) {
+    prv_copy_string(title, title_size, "Enter 2FA password");
+    prv_copy_string(subtitle, subtitle_size, "Open phone settings");
     return;
   }
 
   if (!s_has_session) {
     prv_copy_string(title, title_size, "Sign in required");
-    prv_copy_string(subtitle, subtitle_size, "Open phone config");
+    prv_copy_string(subtitle, subtitle_size, "Open phone settings");
     return;
   }
 
@@ -680,6 +737,12 @@ static void prv_settings_select_click(struct MenuLayer *menu_layer, MenuIndex *c
       prv_clear_chat_items();
       prv_clear_message_items();
       s_active_chat_id = -1;
+      s_has_session = false;
+      s_has_auth_error = false;
+      s_auth_step = TgAuthStepPhone;
+      if (s_chat_list_menu_layer) {
+        menu_layer_reload_data(s_chat_list_menu_layer);
+      }
       prv_copy_string(s_active_chat_title, sizeof(s_active_chat_title), "Chat");
       if (window_stack_contains_window(s_preview_window)) {
         window_stack_remove(s_preview_window, false);
@@ -955,6 +1018,10 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
       s_preview_chat_message = parsed.preview_chat_message;
       s_has_session = parsed.has_session;
       s_has_auth_error = parsed.has_auth_error;
+      prv_set_auth_step_from_string(parsed.auth_step);
+      if (!s_has_session) {
+        prv_clear_chat_items();
+      }
       if (s_settings_menu_layer) {
         menu_layer_reload_data(s_settings_menu_layer);
       }
@@ -1062,6 +1129,7 @@ static void prv_init(void) {
   s_has_received_inbox = false;
   s_has_session = false;
   s_has_auth_error = false;
+  s_auth_step = TgAuthStepUnknown;
 
   s_chat_list_window = window_create();
   window_set_window_handlers(s_chat_list_window, (WindowHandlers){
