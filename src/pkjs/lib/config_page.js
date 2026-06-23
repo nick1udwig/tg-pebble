@@ -23,6 +23,18 @@ function parseConfigPageResponse(response) {
     return null;
   }
 
+  if (typeof response === "object") {
+    if (response.action) {
+      return response;
+    }
+
+    if (response.response !== undefined && response.response !== null) {
+      return parseConfigPageResponse(response.response);
+    }
+
+    return null;
+  }
+
   try {
     return JSON.parse(decodeURIComponent(String(response)));
   } catch (_error) {

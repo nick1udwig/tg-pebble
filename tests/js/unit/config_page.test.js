@@ -30,6 +30,14 @@ describe("config page helpers", () => {
       action: "config:save",
       state: { sendMode: "auto" },
     });
+    expect(parseConfigPageResponse({ response: encoded })).toEqual({
+      action: "config:save",
+      state: { sendMode: "auto" },
+    });
+    expect(parseConfigPageResponse({ action: "settings:update", state: { sendMode: "preview" } })).toEqual({
+      action: "settings:update",
+      state: { sendMode: "preview" },
+    });
     expect(parseConfigPageResponse("CANCELLED")).toBe(null);
     expect(parseConfigPageResponse("not-json")).toBe(null);
   });
