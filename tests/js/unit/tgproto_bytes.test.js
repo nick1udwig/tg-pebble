@@ -45,4 +45,9 @@ describe("tgproto byte primitives", () => {
   it("converts hex safely", () => {
     expect(bytesToHex(bytesFromHex("ef ef ef ef"))).toBe("efefefef");
   });
+
+  it("rejects malformed hex input", () => {
+    expect(() => bytesFromHex("abc")).toThrow(/even number/);
+    expect(() => bytesFromHex("zz")).toThrow(/Invalid hex byte/);
+  });
 });

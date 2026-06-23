@@ -25,9 +25,18 @@ function bytesFromHex(hex) {
   var clean = String(hex || "").replace(/\s+/g, "");
   var out = new Uint8Array(clean.length / 2);
   var index;
+  var pair;
+
+  if (clean.length % 2 !== 0) {
+    throw new Error("Hex input must contain an even number of digits.");
+  }
 
   for (index = 0; index < out.length; index += 1) {
-    out[index] = parseInt(clean.slice(index * 2, index * 2 + 2), 16);
+    pair = clean.slice(index * 2, index * 2 + 2);
+    if (!/^[0-9a-fA-F]{2}$/.test(pair)) {
+      throw new Error("Invalid hex byte: " + pair);
+    }
+    out[index] = parseInt(pair, 16);
   }
 
   return out;
