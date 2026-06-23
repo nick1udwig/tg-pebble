@@ -63,6 +63,38 @@ describe("telegram adapter mapping", () => {
     });
   });
 
+  it("groups outgoing messages as self even when Telegram reports the peer sender id", () => {
+    const messages = mapMessages([
+      {
+        id: 1,
+        out: false,
+        senderId: "42",
+        sender: { firstName: "Alice" },
+        message: "Incoming",
+      },
+      {
+        id: 2,
+        out: true,
+        senderId: "42",
+        sender: { firstName: "Alice" },
+        message: "Reply",
+      },
+    ]);
+
+    expect(messages).toEqual([
+      expect.objectContaining({
+        senderId: "42",
+        senderName: "Alice",
+        showSender: true,
+      }),
+      expect.objectContaining({
+        senderId: "self",
+        senderName: "You",
+        showSender: true,
+      }),
+    ]);
+  });
+
   it("connects the Telegram client before hydrating dialogs", async () => {
     const client = {
       connect: vi.fn(async () => {}),

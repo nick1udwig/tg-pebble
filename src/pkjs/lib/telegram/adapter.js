@@ -234,7 +234,7 @@ function mapMessages(messages) {
 
   for (index = 0; index < messages.length; index += 1) {
     message = messages[index];
-    senderId = message.senderId != null ? String(message.senderId) : (message.out ? "self" : "unknown");
+    senderId = message.out ? "self" : (message.senderId != null ? String(message.senderId) : "unknown");
     mapped.push({
       senderId: senderId,
       senderName: formatSenderName(message),
