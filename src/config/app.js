@@ -55,7 +55,15 @@ function readEmbeddedState() {
   try {
     const params = new URLSearchParams(globalThis.location?.search ?? "");
     const raw = params.get("state");
-    return raw ? JSON.parse(decodeURIComponent(raw)) : {};
+    if (!raw) {
+      return {};
+    }
+
+    try {
+      return JSON.parse(raw);
+    } catch (_error) {
+      return JSON.parse(decodeURIComponent(raw));
+    }
   } catch (_error) {
     return {};
   }

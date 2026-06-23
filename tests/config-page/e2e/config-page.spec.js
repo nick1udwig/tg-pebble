@@ -220,3 +220,18 @@ test("scrubs sensitive auth fields from bootstrap state and renders auth errors"
   expect(stored.loginCode).toBeUndefined();
   expect(stored.password).toBeUndefined();
 });
+
+test("loads embedded state values containing literal percent characters", async ({ page }) => {
+  const initialState = encodeURIComponent(JSON.stringify({
+    phoneNumber: "+15550003333",
+    hasSession: true,
+    accountLabel: "A%B",
+    authError: "100% failed",
+  }));
+
+  await page.goto(`/?state=${initialState}`);
+
+  await expect(page.locator("#phone-number")).toHaveValue("+15550003333");
+  await expect(page.locator("#session-state")).toHaveText("Session active: A%B");
+  await expect(page.locator("#status-banner")).toHaveText("Last sign-in failed: 100% failed");
+});
