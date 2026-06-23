@@ -1,5 +1,6 @@
 var cacheStoreLib = require("./cache_store");
 var fixturesLib = require("./fixtures");
+var numberLib = require("./number");
 var protocol = require("./protocol");
 var syncStateLib = require("./sync_state");
 
@@ -7,6 +8,7 @@ var createCacheStore = cacheStoreLib.createCacheStore;
 var createFixtureState = fixturesLib.createFixtureState;
 var buildChatListPagePayload = protocol.buildChatListPagePayload;
 var buildChatPagePayload = protocol.buildChatPagePayload;
+var isFiniteNumber = numberLib.isFiniteNumber;
 var SyncEvent = syncStateLib.SyncEvent;
 var SyncState = syncStateLib.SyncState;
 var reduceSyncState = syncStateLib.reduceSyncState;
@@ -351,7 +353,7 @@ function createPkjsApp(options) {
         phoneNumber: String(request.phoneNumber || "").trim(),
         phoneCodeHash: String(request.phoneCodeHash || ""),
         codeDelivery: request.isCodeViaApp === true ? "app" : "sms",
-        codeRequestedAt: Number.isFinite(codeRequestedAt) && codeRequestedAt > 0 ? codeRequestedAt : Date.now(),
+        codeRequestedAt: isFiniteNumber(codeRequestedAt) && codeRequestedAt > 0 ? codeRequestedAt : Date.now(),
         telegramWebDcId: request.telegramWebDcId,
         telegramWebDcHost: request.telegramWebDcHost,
         telegramWebDcPort: request.telegramWebDcPort,
@@ -372,7 +374,7 @@ function createPkjsApp(options) {
         phoneNumber: String(request.phoneNumber || currentAuthState.phoneNumber || "").trim(),
         phoneCodeHash: String(request.phoneCodeHash || currentAuthState.phoneCodeHash || ""),
         codeDelivery: request.codeDelivery || currentAuthState.codeDelivery || "",
-        codeRequestedAt: Number.isFinite(codeRequestedAt) && codeRequestedAt > 0 ? codeRequestedAt : Date.now(),
+        codeRequestedAt: isFiniteNumber(codeRequestedAt) && codeRequestedAt > 0 ? codeRequestedAt : Date.now(),
         telegramWebDcId: request.telegramWebDcId || currentAuthState.telegramWebDcId,
         telegramWebDcHost: request.telegramWebDcHost || currentAuthState.telegramWebDcHost,
         telegramWebDcPort: request.telegramWebDcPort || currentAuthState.telegramWebDcPort,

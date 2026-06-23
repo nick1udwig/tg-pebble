@@ -1,10 +1,13 @@
 var auth = require("./auth");
+var numberLib = require("../number");
 var tgprotoClient = require("../tgproto/client");
 var tl = require("../tgproto/tl");
 
 var Api = tl.Api;
 var createTelegramClient = auth.createTelegramClient;
 var createInputPeer = tgprotoClient.createInputPeer;
+var isFiniteNumber = numberLib.isFiniteNumber;
+var parseIntegerValue = numberLib.parseInteger;
 
 var REQUIRED_ENV_KEYS = Object.freeze([
   "TG_API_ID",
@@ -26,8 +29,7 @@ function parseBoolean(value, fallback) {
 }
 
 function parseInteger(value) {
-  var parsed = Number.parseInt(String(value == null ? "" : value), 10);
-  return Number.isFinite(parsed) ? parsed : NaN;
+  return parseIntegerValue(value);
 }
 
 function loadTelegramTestEnv(env) {
@@ -52,7 +54,7 @@ function loadTelegramTestEnv(env) {
     }
   }
 
-  if (!Number.isFinite(apiId)) {
+  if (!isFiniteNumber(apiId)) {
     missing.push("TG_API_ID");
   }
 
@@ -112,18 +114,18 @@ function loadTelegramTestEnv(env) {
     targetPeer: targetPeer,
     mutationTextPrefix: String(source.TG_TEST_MUTATION_TEXT_PREFIX || "[TG Pebble Test]"),
     preferSignUp: preferSignUp,
-    connectionRetries: Number.isFinite(parseInteger(source.TG_TEST_CONNECTION_RETRIES))
+    connectionRetries: isFiniteNumber(parseInteger(source.TG_TEST_CONNECTION_RETRIES))
       ? parseInteger(source.TG_TEST_CONNECTION_RETRIES)
       : 3,
-    requestRetries: Number.isFinite(parseInteger(source.TG_TEST_REQUEST_RETRIES))
+    requestRetries: isFiniteNumber(parseInteger(source.TG_TEST_REQUEST_RETRIES))
       ? parseInteger(source.TG_TEST_REQUEST_RETRIES)
       : 3,
-    reconnectRetries: Number.isFinite(parseInteger(source.TG_TEST_RECONNECT_RETRIES))
+    reconnectRetries: isFiniteNumber(parseInteger(source.TG_TEST_RECONNECT_RETRIES))
       ? parseInteger(source.TG_TEST_RECONNECT_RETRIES)
       : 0,
-    forceDcId: Number.isFinite(forceDcId) ? forceDcId : null,
+    forceDcId: isFiniteNumber(forceDcId) ? forceDcId : null,
     forceServerAddress: String(source.TG_TEST_FORCE_SERVER_ADDRESS || ""),
-    forcePort: Number.isFinite(forcePort) ? forcePort : null,
+    forcePort: isFiniteNumber(forcePort) ? forcePort : null,
     missing: Array.from(new Set(missing)),
     errors: errors
   };
@@ -137,7 +139,7 @@ function createTelegramTestClient(config, sessionString) {
   var savedSession = sessionString || "";
   var runtimeConfig;
 
-  if (!Number.isFinite(config.apiId)) {
+  if (!isFiniteNumber(config.apiId)) {
     throw new Error("TG_API_ID must be set to a valid integer.");
   }
 
@@ -249,7 +251,7 @@ async function listTelegramDialogs(client, options) {
 
   await ensureTelegramTestClientConnected(client);
   return client.getDialogs({
-    limit: Number.isFinite(parseInteger(params.limit)) ? parseInteger(params.limit) : 20
+    limit: isFiniteNumber(parseInteger(params.limit)) ? parseInteger(params.limit) : 20
   });
 }
 
@@ -258,7 +260,7 @@ async function getTelegramDialogMessages(client, entity, options) {
 
   await ensureTelegramTestClientConnected(client);
   return client.getMessages(entity, {
-    limit: Number.isFinite(parseInteger(params.limit)) ? parseInteger(params.limit) : 20
+    limit: isFiniteNumber(parseInteger(params.limit)) ? parseInteger(params.limit) : 20
   });
 }
 

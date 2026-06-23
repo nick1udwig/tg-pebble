@@ -3,6 +3,9 @@
 var tl = require("./tl");
 var webSocket = require("./web_socket");
 var sessionLib = require("./session");
+var numberLib = require("../number");
+
+var isFiniteNumber = numberLib.isFiniteNumber;
 
 var TELEGRAM_WEB_DCS = Object.freeze({
   1: { dcId: 1, host: "pluto.web.telegram.org", port: 443 },
@@ -63,7 +66,7 @@ function NativeTelegramClient(options) {
   this.dc = getTelegramWebDc(this.options.dcId || 2);
   host = String(this.options.host || "").trim();
   port = Number(this.options.port || this.dc.port || 443);
-  if (host && Number.isFinite(port) && port > 0) {
+  if (host && isFiniteNumber(port) && port > 0) {
     this.dc = {
       dcId: Number(this.options.dcId || this.dc.dcId),
       host: host,
@@ -131,7 +134,7 @@ function getMigrationDc(result) {
   }
 
   dcId = Number(match[1]);
-  return Number.isFinite(dcId) && dcId > 0 ? dcId : 0;
+  return isFiniteNumber(dcId) && dcId > 0 ? dcId : 0;
 }
 
 function callHook(callback) {

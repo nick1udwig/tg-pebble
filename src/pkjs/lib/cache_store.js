@@ -1,8 +1,10 @@
 var protocol = require("./protocol");
+var numberLib = require("./number");
 
 var ProtocolByteLimit = protocol.ProtocolByteLimit;
 var truncateUtf8 = protocol.truncateUtf8;
 var utf8ByteLength = protocol.utf8ByteLength;
+var isFiniteNumber = numberLib.isFiniteNumber;
 
 var CACHE_KEYS = Object.freeze({
   session: "session",
@@ -90,10 +92,10 @@ function normalizeAuthState(authState) {
     codeDelivery: authState && authState.codeDelivery === "app" ? "app" : (
       authState && authState.codeDelivery === "sms" ? "sms" : ""
     ),
-    codeRequestedAt: Number.isFinite(codeRequestedAt) && codeRequestedAt > 0 ? codeRequestedAt : 0,
-    telegramWebDcId: Number.isFinite(telegramWebDcId) && telegramWebDcId > 0 ? telegramWebDcId : 0,
+    codeRequestedAt: isFiniteNumber(codeRequestedAt) && codeRequestedAt > 0 ? codeRequestedAt : 0,
+    telegramWebDcId: isFiniteNumber(telegramWebDcId) && telegramWebDcId > 0 ? telegramWebDcId : 0,
     telegramWebDcHost: String(authState && authState.telegramWebDcHost ? authState.telegramWebDcHost : "").trim(),
-    telegramWebDcPort: Number.isFinite(telegramWebDcPort) && telegramWebDcPort > 0 ? telegramWebDcPort : 0,
+    telegramWebDcPort: isFiniteNumber(telegramWebDcPort) && telegramWebDcPort > 0 ? telegramWebDcPort : 0,
     forceWSS: authState && authState.forceWSS === true,
     authSessionString: String(authState && authState.authSessionString ? authState.authSessionString : ""),
     passwordRequired: authState && authState.passwordRequired === true,

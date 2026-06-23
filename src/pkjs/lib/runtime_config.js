@@ -1,5 +1,8 @@
 var RUNTIME_CONFIG_STORAGE_KEY = "tg_pebble:runtime_config";
 var DEFAULT_CONFIG_URL = "http://127.0.0.1:4173";
+var numberLib = require("./number");
+var isFiniteNumber = numberLib.isFiniteNumber;
+var parseInteger = numberLib.parseInteger;
 
 function parseBoolean(value, fallback) {
   if (value === undefined || value === null || value === "") {
@@ -10,9 +13,9 @@ function parseBoolean(value, fallback) {
 }
 
 function parseApiId(value) {
-  var parsed = Number.parseInt(String(value == null ? "" : value), 10);
+  var parsed = parseInteger(value);
 
-  if (!Number.isFinite(parsed)) {
+  if (!isFiniteNumber(parsed)) {
     return null;
   }
 

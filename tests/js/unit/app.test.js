@@ -104,6 +104,33 @@ describe("createPkjsApp", () => {
     expect(app.getConfigState()).not.toHaveProperty("phoneCodeHash");
   });
 
+  it("records pending login-code requests when Number.isFinite is unavailable", () => {
+    const originalIsFinite = Number.isFinite;
+    const app = createPkjsApp({ storage: createMemoryStorage() });
+
+    try {
+      Number.isFinite = undefined;
+      app.setSession({ sessionString: "", phoneNumber: "+15551234567" });
+      app.setAuthCodeRequest({
+        phoneNumber: "+15551234567",
+        phoneCodeHash: "hash-123",
+        codeRequestedAt: "1234",
+      });
+
+      expect(app.getPendingAuthRequest("+15551234567")).toMatchObject({
+        phoneNumber: "+15551234567",
+        phoneCodeHash: "hash-123",
+        codeRequestedAt: 1234,
+      });
+      expect(app.getConfigState()).toMatchObject({
+        phoneNumber: "+15551234567",
+        codeRequested: true,
+      });
+    } finally {
+      Number.isFinite = originalIsFinite;
+    }
+  });
+
   it("exposes password-required state with only the public SRP challenge", () => {
     const app = createPkjsApp({ storage: createMemoryStorage() });
     const passwordChallenge = {

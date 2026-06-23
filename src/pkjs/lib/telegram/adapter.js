@@ -1,8 +1,10 @@
 var messageGroups = require("../message_groups");
+var numberLib = require("../number");
 var placeholders = require("../placeholders");
 var tgprotoClient = require("../tgproto/client");
 
 var addSenderRunMetadata = messageGroups.addSenderRunMetadata;
+var isFiniteNumber = numberLib.isFiniteNumber;
 var toDisplayText = placeholders.toDisplayText;
 var createInputPeer = tgprotoClient.createInputPeer;
 
@@ -199,7 +201,7 @@ function mapDialogs(dialogs, cachedRefs, options) {
     }
 
     watchId = reverseByPeerId[remoteRef.peerKey];
-    if (!Number.isFinite(watchId)) {
+    if (!isFiniteNumber(watchId)) {
       watchId = nextWatchId;
       usedIds[watchId] = true;
       nextWatchId += 1;

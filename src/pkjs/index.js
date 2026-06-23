@@ -1,5 +1,6 @@
 var appLib = require("./lib/app");
 var configPageLib = require("./lib/config_page");
+var numberLib = require("./lib/number");
 var protocol = require("./lib/protocol");
 var runtimeConfigLib = require("./lib/runtime_config");
 var syncStateLib = require("./lib/sync_state");
@@ -10,6 +11,7 @@ var parseConfigPageResponse = configPageLib.parseConfigPageResponse;
 var encodeMessage = protocol.encodeMessage;
 var MessageType = protocol.MessageType;
 var loadTelegramRuntimeConfig = runtimeConfigLib.loadTelegramRuntimeConfig;
+var isFiniteNumber = numberLib.isFiniteNumber;
 var serializeChatItem = protocol.serializeChatItem;
 var serializeChatPageError = protocol.serializeChatPageError;
 var serializeMessageItem = protocol.serializeMessageItem;
@@ -124,8 +126,8 @@ function buildAuthRequestDebug(authRequest) {
   var phoneCodeHash = String(request.phoneCodeHash || "");
   var codeRequestedAt = Number(request.codeRequestedAt || 0);
   var details = {
-    codeRequestedAt: Number.isFinite(codeRequestedAt) && codeRequestedAt > 0 ? codeRequestedAt : "",
-    requestAgeMs: Number.isFinite(codeRequestedAt) && codeRequestedAt > 0 ? Date.now() - codeRequestedAt : "",
+    codeRequestedAt: isFiniteNumber(codeRequestedAt) && codeRequestedAt > 0 ? codeRequestedAt : "",
+    requestAgeMs: isFiniteNumber(codeRequestedAt) && codeRequestedAt > 0 ? Date.now() - codeRequestedAt : "",
     dcId: request.telegramWebDcId || "",
     host: request.telegramWebDcHost || "",
     port: request.telegramWebDcPort || "",
@@ -683,7 +685,7 @@ function buildTelegramWebDcCandidateFromAuthRequest(authRequest) {
   var host = String(authRequest && authRequest.telegramWebDcHost ? authRequest.telegramWebDcHost : "").trim();
   var port = Number(authRequest && authRequest.telegramWebDcPort);
 
-  if (!Number.isFinite(dcId) || dcId <= 0 || !host || !Number.isFinite(port) || port <= 0) {
+  if (!isFiniteNumber(dcId) || dcId <= 0 || !host || !isFiniteNumber(port) || port <= 0) {
     return null;
   }
 

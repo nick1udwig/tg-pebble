@@ -3,12 +3,14 @@ var tgprotoSender = require("../tgproto/sender");
 var tgprotoPassword = require("../tgproto/password");
 var tgprotoSession = require("../tgproto/session");
 var tl = require("../tgproto/tl");
+var numberLib = require("../number");
 
 var NativeTelegramClient = tgprotoClient.NativeTelegramClient;
 var NativeMtProtoSender = tgprotoSender.NativeMtProtoSender;
 var NativeTelegramSession = tgprotoSession.NativeTelegramSession;
 var base64Decode = tgprotoSession.base64Decode;
 var base64Encode = tgprotoSession.base64Encode;
+var isFiniteNumber = numberLib.isFiniteNumber;
 
 function buildApiCredentials(runtimeConfig) {
   return {
@@ -50,7 +52,7 @@ function seedTelegramWebDc(session, runtimeConfig) {
   host = String(runtimeConfig.telegramWebDcHost || "").trim();
   port = Number(runtimeConfig.telegramWebDcPort);
 
-  if (!Number.isFinite(dcId) || dcId <= 0 || !host || !Number.isFinite(port) || port <= 0) {
+  if (!isFiniteNumber(dcId) || dcId <= 0 || !host || !isFiniteNumber(port) || port <= 0) {
     return;
   }
 
@@ -63,7 +65,7 @@ function createTelegramClient(runtimeConfig, sessionString) {
   var host;
   var port;
 
-  if (!runtimeConfig || !Number.isFinite(runtimeConfig.apiId) || !runtimeConfig.apiHash) {
+  if (!runtimeConfig || !isFiniteNumber(runtimeConfig.apiId) || !runtimeConfig.apiHash) {
     throw new Error("Telegram runtime config is incomplete.");
   }
 
@@ -132,7 +134,7 @@ function readTelegramWebDcFromClient(client, runtimeConfig) {
   var host = String(session && session.serverAddress ? session.serverAddress : "").trim();
   var port = Number(session && session.port);
 
-  if (!Number.isFinite(dcId) || dcId <= 0 || !host || !Number.isFinite(port) || port <= 0) {
+  if (!isFiniteNumber(dcId) || dcId <= 0 || !host || !isFiniteNumber(port) || port <= 0) {
     return {};
   }
 

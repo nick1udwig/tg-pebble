@@ -81,6 +81,32 @@ describe("createCacheStore", () => {
     });
   });
 
+  it("normalizes auth state when Number.isFinite is unavailable", () => {
+    const originalIsFinite = Number.isFinite;
+    const store = createCacheStore(createMemoryStorage());
+
+    try {
+      Number.isFinite = undefined;
+      store.setAuthState({
+        phoneNumber: " +15551234567 ",
+        phoneCodeHash: "hash-123",
+        codeRequestedAt: "1234",
+        telegramWebDcId: "1",
+        telegramWebDcPort: "443",
+      });
+
+      expect(store.getAuthState()).toMatchObject({
+        phoneNumber: "+15551234567",
+        phoneCodeHash: "hash-123",
+        codeRequestedAt: 1234,
+        telegramWebDcId: 1,
+        telegramWebDcPort: 443,
+      });
+    } finally {
+      Number.isFinite = originalIsFinite;
+    }
+  });
+
   it("clears chats and message pages without deleting the session", () => {
     const store = createCacheStore(createMemoryStorage());
 

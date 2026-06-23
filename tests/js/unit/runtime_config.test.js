@@ -49,6 +49,32 @@ describe("loadTelegramRuntimeConfig", () => {
     });
   });
 
+  it("loads Telegram config when Number ES6 helpers are unavailable", () => {
+    const originalIsFinite = Number.isFinite;
+    const originalParseInt = Number.parseInt;
+
+    try {
+      Number.isFinite = undefined;
+      Number.parseInt = undefined;
+
+      expect(loadTelegramRuntimeConfig({
+        envSource: {
+          TG_API_ID: "123456",
+          TG_API_HASH: "env-hash",
+        },
+        storage: createMemoryStorage(),
+        embeddedSource: null,
+      })).toMatchObject({
+        apiId: 123456,
+        apiHash: "env-hash",
+        source: "env",
+      });
+    } finally {
+      Number.isFinite = originalIsFinite;
+      Number.parseInt = originalParseInt;
+    }
+  });
+
   it("falls back to stored emulator runtime config when env is unavailable", () => {
     const config = loadTelegramRuntimeConfig({
       envSource: null,
