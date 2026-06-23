@@ -91,6 +91,17 @@ describe("tgproto TL codec", () => {
     });
   });
 
+  it("adds TL field paths to truncated response errors", () => {
+    const object = Api.auth.SentCode({
+      type: Api.auth.SentCodeTypeApp({ length: 5 }),
+      phoneCodeHash: "phone-hash",
+    });
+
+    expect(() => deserializeObject(serializeObject(object).slice(0, -1))).toThrow(
+      /TL read failed at auth\.sentCode\.phoneCodeHash/
+    );
+  });
+
   it("keeps MTProto auth string fields as raw bytes", () => {
     const request = Api.ReqDHParams({
       nonce: new Uint8Array(16),

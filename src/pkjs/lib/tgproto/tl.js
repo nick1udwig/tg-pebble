@@ -449,6 +449,22 @@ function readBoolFromConstructor(id) {
   throw new Error("Unexpected Bool constructor: 0x" + (id >>> 0).toString(16));
 }
 
+function annotateReadError(error, path, reader) {
+  var original = error || new Error("Unknown TL read error.");
+  var baseMessage = original.tlBaseMessage || original.message || String(original);
+  var innerPath = original.tlPath || "";
+  var nextPath = path + (innerPath ? "." + innerPath : "");
+  var wrapped = new Error(
+    "TL read failed at " + nextPath +
+    " (offset " + reader.offset + ", remaining " + reader.remaining() + "): " + baseMessage
+  );
+
+  wrapped.tlPath = nextPath;
+  wrapped.tlBaseMessage = baseMessage;
+  wrapped.cause = original;
+  return wrapped;
+}
+
 function readType(reader, type) {
   var count;
   var itemType;
@@ -472,7 +488,11 @@ function readType(reader, type) {
     count = reader.readInt32();
     out = [];
     for (index = 0; index < count; index += 1) {
-      out.push(readType(reader, itemType));
+      try {
+        out.push(readType(reader, itemType));
+      } catch (error) {
+        throw annotateReadError(error, "Vector<" + itemType + ">[" + index + "]", reader);
+      }
     }
     return out;
   }
@@ -537,19 +557,23 @@ function readBareObjectDef(reader, def) {
 
   for (index = 0; index < def.fields.length; index += 1) {
     field = def.fields[index];
-    if (field.flagIndicator) {
-      flags[field.name] = reader.readUInt32();
-      object[field.name] = flags[field.name];
-    } else if (field.optional) {
-      if ((flags[field.flagName] & (1 << field.flagIndex)) !== 0) {
-        object[field.name] = field.type === "true" ? true : (
-          isBinaryStringField(def, field) ? reader.readTlBytes() : readType(reader, field.type)
-        );
+    try {
+      if (field.flagIndicator) {
+        flags[field.name] = reader.readUInt32();
+        object[field.name] = flags[field.name];
+      } else if (field.optional) {
+        if ((flags[field.flagName] & (1 << field.flagIndex)) !== 0) {
+          object[field.name] = field.type === "true" ? true : (
+            isBinaryStringField(def, field) ? reader.readTlBytes() : readType(reader, field.type)
+          );
+        } else {
+          object[field.name] = field.type === "true" ? false : null;
+        }
       } else {
-        object[field.name] = field.type === "true" ? false : null;
+        object[field.name] = isBinaryStringField(def, field) ? reader.readTlBytes() : readType(reader, field.type);
       }
-    } else {
-      object[field.name] = isBinaryStringField(def, field) ? reader.readTlBytes() : readType(reader, field.type);
+    } catch (error) {
+      throw annotateReadError(error, def.tlName + "." + field.name, reader);
     }
   }
 
