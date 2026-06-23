@@ -3,6 +3,7 @@
 var tl = require("./tl");
 var webSocket = require("./web_socket");
 var sessionLib = require("./session");
+var tlSchema = require("./tl_schema");
 var numberLib = require("../number");
 var objectLib = require("../object");
 
@@ -17,7 +18,7 @@ var TELEGRAM_WEB_DCS = freeze({
   5: { dcId: 5, host: "flora.web.telegram.org", port: 443 }
 });
 
-var TELEGRAM_API_LAYER = 198;
+var TELEGRAM_API_LAYER = tlSchema.apiLayer;
 
 function getTelegramWebDc(dcId) {
   var dc = TELEGRAM_WEB_DCS[Number(dcId)];

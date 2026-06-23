@@ -3,6 +3,7 @@
 // Telegram TL schema data for the native PKJS MTProto codec.
 
 module.exports = {
+  apiLayer: 198,
   apiTl: `boolFalse#bc799737 = Bool;
 boolTrue#997275b5 = Bool;
 true#3fedd339 = True;

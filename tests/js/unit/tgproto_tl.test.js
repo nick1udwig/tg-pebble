@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import pako from "pako";
 
 import { ByteReader, ByteWriter, bytesFromHex, bytesToHex } from "../../../src/pkjs/lib/tgproto/bytes.js";
-import { NativeTelegramClient } from "../../../src/pkjs/lib/tgproto/client.js";
+import { NativeTelegramClient, TELEGRAM_API_LAYER } from "../../../src/pkjs/lib/tgproto/client.js";
+import { apiLayer } from "../../../src/pkjs/lib/tgproto/tl_schema.js";
 import { base64Decode, base64Encode, NativeTelegramSession, SESSION_PREFIX } from "../../../src/pkjs/lib/tgproto/session.js";
 import {
   Api,
@@ -14,6 +15,10 @@ import {
 } from "../../../src/pkjs/lib/tgproto/tl.js";
 
 describe("tgproto TL codec", () => {
+  it("negotiates the same API layer as the bundled schema", () => {
+    expect(TELEGRAM_API_LAYER).toBe(apiLayer);
+  });
+
   it("serializes auth.sendCode with CodeSettings", () => {
     const payload = serializeObject(Api.auth.SendCode({
       phoneNumber: "+15551234567",
