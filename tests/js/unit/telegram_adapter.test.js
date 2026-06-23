@@ -85,6 +85,28 @@ describe("telegram adapter mapping", () => {
     });
   });
 
+  it("maps Telegram voice-note documents to the voice placeholder", () => {
+    const messages = mapMessages([
+      {
+        id: 1,
+        out: false,
+        senderId: "42",
+        sender: { firstName: "Alice" },
+        document: {
+          attributes: [
+            { className: "documentAttributeAudio", voice: true },
+          ],
+        },
+      },
+    ]);
+
+    expect(messages[0]).toMatchObject({
+      senderName: "Alice",
+      text: "Voice message",
+      showSender: true,
+    });
+  });
+
   it("groups outgoing messages as self even when Telegram reports the peer sender id", () => {
     const messages = mapMessages([
       {
