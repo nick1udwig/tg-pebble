@@ -348,11 +348,17 @@ ByteReader.prototype.remaining = function() {
 };
 
 ByteReader.prototype.readRaw = function(length) {
-  var end = this.offset + length;
+  var size = Number(length);
+  var end;
   var value;
 
+  if (size < 0 || Math.floor(size) !== size) {
+    throw new Error("Raw read length must be a non-negative integer.");
+  }
+
+  end = this.offset + size;
   if (end > this.bytes.length) {
-    throw new Error("Not enough bytes to read " + length + " bytes.");
+    throw new Error("Not enough bytes to read " + size + " bytes.");
   }
 
   value = this.bytes.slice(this.offset, end);

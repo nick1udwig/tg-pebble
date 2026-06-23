@@ -50,4 +50,11 @@ describe("tgproto byte primitives", () => {
     expect(() => bytesFromHex("abc")).toThrow(/even number/);
     expect(() => bytesFromHex("zz")).toThrow(/Invalid hex byte/);
   });
+
+  it("rejects negative raw read lengths without moving the cursor", () => {
+    const reader = new ByteReader(new Uint8Array([1, 2, 3]));
+
+    expect(() => reader.readRaw(-1)).toThrow(/non-negative/);
+    expect(reader.remaining()).toBe(3);
+  });
 });
