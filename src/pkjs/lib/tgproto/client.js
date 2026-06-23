@@ -4,10 +4,12 @@ var tl = require("./tl");
 var webSocket = require("./web_socket");
 var sessionLib = require("./session");
 var numberLib = require("../number");
+var objectLib = require("../object");
 
+var freeze = objectLib.freeze;
 var isFiniteNumber = numberLib.isFiniteNumber;
 
-var TELEGRAM_WEB_DCS = Object.freeze({
+var TELEGRAM_WEB_DCS = freeze({
   1: { dcId: 1, host: "pluto.web.telegram.org", port: 443 },
   2: { dcId: 2, host: "venus.web.telegram.org", port: 443 },
   3: { dcId: 3, host: "aurora.web.telegram.org", port: 443 },

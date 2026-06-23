@@ -1,20 +1,22 @@
 var auth = require("./auth");
 var numberLib = require("../number");
+var objectLib = require("../object");
 var tgprotoClient = require("../tgproto/client");
 var tl = require("../tgproto/tl");
 
 var Api = tl.Api;
 var createTelegramClient = auth.createTelegramClient;
 var createInputPeer = tgprotoClient.createInputPeer;
+var freeze = objectLib.freeze;
 var isFiniteNumber = numberLib.isFiniteNumber;
 var parseIntegerValue = numberLib.parseInteger;
 
-var REQUIRED_ENV_KEYS = Object.freeze([
+var REQUIRED_ENV_KEYS = freeze([
   "TG_API_ID",
   "TG_API_HASH"
 ]);
 
-var PLACEHOLDER_PATTERNS = Object.freeze({
+var PLACEHOLDER_PATTERNS = freeze({
   apiHash: /replace-with-api-hash/i,
   phoneNumber: /[XY]/i,
   phoneCode: /X/i

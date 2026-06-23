@@ -14,6 +14,7 @@ var MessageType = protocol.MessageType;
 var loadTelegramRuntimeConfig = runtimeConfigLib.loadTelegramRuntimeConfig;
 var isFiniteNumber = numberLib.isFiniteNumber;
 var assign = objectLib.assign;
+var propertyNames = objectLib.propertyNames;
 var serializeChatItem = protocol.serializeChatItem;
 var serializeChatPageError = protocol.serializeChatPageError;
 var serializeMessageItem = protocol.serializeMessageItem;
@@ -174,7 +175,7 @@ function formatLogExtra(extra) {
     return String(extra);
   }
 
-  names = Object.getOwnPropertyNames(extra);
+  names = propertyNames(extra);
   for (index = 0; index < names.length; index += 1) {
     name = names[index];
     if (summary[name] === undefined) {

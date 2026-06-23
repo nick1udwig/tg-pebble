@@ -1,8 +1,10 @@
 var messageGroups = require("./message_groups");
+var objectLib = require("./object");
 
 var addSenderRunMetadata = messageGroups.addSenderRunMetadata;
+var freeze = objectLib.freeze;
 
-var FIXTURE_CHATS = Object.freeze([
+var FIXTURE_CHATS = freeze([
   { id: 1001, title: "Alice", preview: "See you soon", unreadCount: 2 },
   { id: 2001, title: "Weekend Group", preview: "Bob: brunch at 10?", unreadCount: 11 },
   { id: 3001, title: "Reminder Bot", preview: "Hydration reminder", unreadCount: 1 },
@@ -10,7 +12,7 @@ var FIXTURE_CHATS = Object.freeze([
   { id: 5001, title: "Build Notes", preview: "Fix the sync icon on aplite", unreadCount: 4 }
 ]);
 
-var FIXTURE_MESSAGES = Object.freeze({
+var FIXTURE_MESSAGES = freeze({
   1001: [
     { senderId: 10, senderName: "Alice", outgoing: false, text: "Morning." },
     { senderId: 10, senderName: "Alice", outgoing: false, text: "Still on for tonight?" },

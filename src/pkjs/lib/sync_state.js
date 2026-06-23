@@ -1,10 +1,14 @@
-var SyncState = Object.freeze({
+var objectLib = require("./object");
+
+var freeze = objectLib.freeze;
+
+var SyncState = freeze({
   syncing: "syncing",
   synced: "synced",
   desynced: "desynced"
 });
 
-var SyncEvent = Object.freeze({
+var SyncEvent = freeze({
   refreshStart: "refresh_start",
   refreshSuccess: "refresh_success",
   refreshError: "refresh_error",

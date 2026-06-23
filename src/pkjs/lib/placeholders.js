@@ -1,4 +1,8 @@
-var PLACEHOLDERS = Object.freeze({
+var objectLib = require("./object");
+
+var freeze = objectLib.freeze;
+
+var PLACEHOLDERS = freeze({
   photo: "Photo",
   sticker: "Sticker",
   voice: "Voice message",

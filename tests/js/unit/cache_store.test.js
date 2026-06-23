@@ -207,4 +207,24 @@ describe("createCacheStore", () => {
     expect(utf8ByteLength(pages[2001][3].text)).toBeLessThanOrEqual(ProtocolByteLimit.messageText);
     expect(pages[2001][3].text.endsWith(emoji)).toBe(false);
   });
+
+  it("stores message pages when Object.keys is unavailable", () => {
+    const originalKeys = Object.keys;
+    const store = createCacheStore(createMemoryStorage());
+
+    try {
+      Object.keys = undefined;
+      store.setMessagePages({
+        2001: [
+          { senderId: 1, senderName: "Alice", outgoing: false, text: "hello", showSender: true },
+        ],
+      });
+
+      expect(store.getMessagePages()[2001]).toEqual([
+        { senderId: 1, senderName: "Alice", outgoing: false, text: "hello", showSender: true },
+      ]);
+    } finally {
+      Object.keys = originalKeys;
+    }
+  });
 });

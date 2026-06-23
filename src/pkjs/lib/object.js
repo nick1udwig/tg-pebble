@@ -22,6 +22,39 @@ function assign(target) {
   return output;
 }
 
+function freeze(value) {
+  if (typeof Object.freeze === "function") {
+    return Object.freeze(value);
+  }
+
+  return value;
+}
+
+function keys(source) {
+  var out = [];
+  var key;
+
+  source = source || {};
+  for (key in source) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      out.push(key);
+    }
+  }
+
+  return out;
+}
+
+function propertyNames(source) {
+  if (typeof Object.getOwnPropertyNames === "function") {
+    return Object.getOwnPropertyNames(source);
+  }
+
+  return keys(source);
+}
+
 module.exports = {
-  assign: assign
+  assign: assign,
+  freeze: freeze,
+  keys: keys,
+  propertyNames: propertyNames
 };

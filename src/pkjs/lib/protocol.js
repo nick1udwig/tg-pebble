@@ -1,8 +1,10 @@
+var objectLib = require("./object");
 var syncStateLib = require("./sync_state");
 
+var freeze = objectLib.freeze;
 var SyncState = syncStateLib.SyncState;
 
-var MessageType = Object.freeze({
+var MessageType = freeze({
   appReady: "app_ready",
   openChat: "open_chat",
   chatItem: "chat_item",
@@ -20,14 +22,14 @@ var MessageType = Object.freeze({
   sendResult: "send_result"
 });
 
-var AppMessageKey = Object.freeze({
+var AppMessageKey = freeze({
   type: 0,
   payloadString: 1,
   requestId: 2,
   syncState: 3
 });
 
-var ProtocolByteLimit = Object.freeze({
+var ProtocolByteLimit = freeze({
   chatTitle: 31,
   chatPreview: 63,
   messageSender: 23,

@@ -4,11 +4,13 @@ var objectLib = require("./object");
 
 var ProtocolByteLimit = protocol.ProtocolByteLimit;
 var assign = objectLib.assign;
+var freeze = objectLib.freeze;
+var objectKeys = objectLib.keys;
 var truncateUtf8 = protocol.truncateUtf8;
 var utf8ByteLength = protocol.utf8ByteLength;
 var isFiniteNumber = numberLib.isFiniteNumber;
 
-var CACHE_KEYS = Object.freeze({
+var CACHE_KEYS = freeze({
   session: "session",
   settings: "settings",
   chatList: "chat_list",
@@ -18,12 +20,12 @@ var CACHE_KEYS = Object.freeze({
   authState: "auth_state"
 });
 
-var DEFAULT_SETTINGS = Object.freeze({
+var DEFAULT_SETTINGS = freeze({
   sendMode: "preview",
   previewChatMessage: false
 });
 
-var DEFAULT_AUTH_STATE = Object.freeze({
+var DEFAULT_AUTH_STATE = freeze({
   errorMessage: "",
   phoneNumber: "",
   phoneCodeHash: "",
@@ -192,7 +194,7 @@ function normalizeMessagePages(pages) {
   var messages;
 
   pages = pages && typeof pages === "object" ? pages : {};
-  keys = Object.keys(pages);
+  keys = objectKeys(pages);
 
   for (index = 0; index < keys.length; index += 1) {
     key = keys[index];

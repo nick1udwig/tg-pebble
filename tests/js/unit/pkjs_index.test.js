@@ -831,4 +831,20 @@ describe("PKJS config auth flow", () => {
       harness.restore();
     }
   });
+
+  it("logs object details when Object.getOwnPropertyNames is unavailable", async () => {
+    const originalGetOwnPropertyNames = Object.getOwnPropertyNames;
+    const harness = await loadPkjsHarness();
+
+    try {
+      Object.getOwnPropertyNames = undefined;
+
+      harness.listeners.get("showConfiguration")();
+
+      expect(globalThis.Pebble.openURL).toHaveBeenCalledTimes(1);
+    } finally {
+      Object.getOwnPropertyNames = originalGetOwnPropertyNames;
+      harness.restore();
+    }
+  });
 });
