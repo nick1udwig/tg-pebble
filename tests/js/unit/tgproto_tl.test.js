@@ -407,4 +407,51 @@ describe("native Telegram client facade", () => {
       }),
     ]);
   });
+
+  it("normalizes Telegram history from newest-first to watch display order", async () => {
+    const sender = {
+      connect: vi.fn(async () => {}),
+      disconnect: vi.fn(async () => {}),
+      invoke: vi.fn(async () => Api.messages.Messages({
+        messages: [
+          Api.Message({
+            id: 12,
+            peerId: Api.PeerUser({ userId: "42" }),
+            date: 2,
+            message: "Newest",
+          }),
+          Api.Message({
+            id: 11,
+            peerId: Api.PeerUser({ userId: "42" }),
+            date: 1,
+            message: "Older",
+          }),
+        ],
+        chats: [],
+        users: [
+          Api.User({
+            id: "42",
+            accessHash: "99",
+            firstName: "Alice",
+          }),
+        ],
+      })),
+    };
+    const client = new NativeTelegramClient({ sender });
+
+    await expect(client.getMessages({
+      className: "InputPeerUser",
+      userId: "42",
+      accessHash: "99",
+    }, { limit: 5 })).resolves.toEqual([
+      expect.objectContaining({
+        id: 11,
+        message: "Older",
+      }),
+      expect.objectContaining({
+        id: 12,
+        message: "Newest",
+      }),
+    ]);
+  });
 });

@@ -428,7 +428,7 @@ function normalizeMessages(result) {
     out.push(attachMessageSender(list[index], entities));
   }
 
-  return out;
+  return out.reverse();
 }
 
 function normalizeAuthorization(result) {
