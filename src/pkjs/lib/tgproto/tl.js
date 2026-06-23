@@ -486,6 +486,9 @@ function readType(reader, type) {
       }
     }
     count = reader.readInt32();
+    if (count < 0) {
+      throw new Error("Negative TL vector count: " + count);
+    }
     out = [];
     for (index = 0; index < count; index += 1) {
       try {

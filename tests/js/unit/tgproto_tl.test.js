@@ -10,6 +10,7 @@ import {
   deserializeResult,
   GZIP_PACKED_CONSTRUCTOR_ID,
   serializeObject,
+  VECTOR_CONSTRUCTOR_ID,
 } from "../../../src/pkjs/lib/tgproto/tl.js";
 
 describe("tgproto TL codec", () => {
@@ -132,6 +133,18 @@ describe("tgproto TL codec", () => {
     const payload = new Uint8Array([...serializeObject(result), 0]);
 
     expect(() => deserializeResult(request, payload)).toThrow(/Trailing TL bytes after auth.sendCode result: 1/);
+  });
+
+  it("rejects negative TL vector counts", () => {
+    const request = Api.users.GetUsers({
+      id: [Api.InputUserSelf({})],
+    });
+    const writer = new ByteWriter();
+
+    writer.writeUInt32(VECTOR_CONSTRUCTOR_ID);
+    writer.writeInt32(-1);
+
+    expect(() => deserializeResult(request, writer.result())).toThrow(/Negative TL vector count: -1/);
   });
 
   it("keeps MTProto auth string fields as raw bytes", () => {
