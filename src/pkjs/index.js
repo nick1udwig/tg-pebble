@@ -221,6 +221,15 @@ function getErrorMessage(error, fallback) {
   return String(fallback || "Unknown error.");
 }
 
+function getTelegramErrorCode(error) {
+  return String(error && (error.errorMessage || error.error_message || error.message) || "").trim();
+}
+
+function isTerminalLoginCodeError(error) {
+  var code = getTelegramErrorCode(error);
+  return code === "PHONE_CODE_EXPIRED" || code === "PHONE_CODE_INVALID";
+}
+
 function createTelegramClientFactory(config, defaultSessionString) {
   if (!config) {
     return null;
@@ -1119,6 +1128,7 @@ async function handleConfigSave(state) {
   var pendingAuthRequest;
   var resolvedRuntimeConfig;
   var resolvedTelegramClientFactory;
+  var authErrorMessage;
 
   applyConfigSettings(nextState);
 
@@ -1190,7 +1200,10 @@ async function handleConfigSave(state) {
         return;
       }
       log("Telegram config auth failed", error);
-      app.setAuthError(getErrorMessage(error, "Telegram sign-in failed."));
+      authErrorMessage = getErrorMessage(error, "Telegram sign-in failed.");
+      app.setAuthError(authErrorMessage, {
+        clearPendingAuth: isTerminalLoginCodeError(error)
+      });
       app.refreshFailed();
       sendSettingsState(SyncState.desynced);
       sendEnvelope(MessageType.syncStatus, "", 0, SyncState.desynced);

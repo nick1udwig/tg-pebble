@@ -182,6 +182,29 @@ describe("createPkjsApp", () => {
     });
   });
 
+  it("can clear stale pending login-code state while preserving the auth error", () => {
+    const app = createPkjsApp({ storage: createMemoryStorage() });
+
+    app.setSession({ sessionString: "", phoneNumber: "+15551234567" });
+    app.setAuthCodeRequest({
+      phoneNumber: "+15551234567",
+      phoneCodeHash: "hash-123",
+      isCodeViaApp: true,
+      authSessionString: "temp-auth-session",
+    });
+
+    app.setAuthError("PHONE_CODE_EXPIRED", { clearPendingAuth: true });
+
+    expect(app.getPendingAuthRequest("+15551234567")).toBe(null);
+    expect(app.getConfigState()).toMatchObject({
+      phoneNumber: "+15551234567",
+      authError: "PHONE_CODE_EXPIRED",
+      codeRequested: false,
+      passwordRequired: false,
+      passwordChallenge: null,
+    });
+  });
+
   it("appends a fixture outgoing message on successful send", async () => {
     const app = createPkjsApp({ storage: createMemoryStorage() });
     const before = (await app.getChatPage(1001)).messages.length;

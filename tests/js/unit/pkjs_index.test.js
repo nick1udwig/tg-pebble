@@ -621,6 +621,65 @@ describe("PKJS config auth flow", () => {
     }
   });
 
+  it("clears stale pending login-code state after terminal code auth errors", async () => {
+    const phoneCodeExpired = new Error("PHONE_CODE_EXPIRED");
+    phoneCodeExpired.errorMessage = "PHONE_CODE_EXPIRED";
+    const harness = await loadPkjsHarness({
+      authorizeError: phoneCodeExpired,
+    });
+
+    try {
+      harness.storage.setItem("tg_pebble:auth_state", JSON.stringify({
+        errorMessage: "",
+        phoneNumber: "+15551234567",
+        phoneCodeHash: "hash-123",
+        codeDelivery: "app",
+        codeRequestedAt: 1234,
+        telegramWebDcId: 1,
+        telegramWebDcHost: "pluto.web.telegram.org",
+        telegramWebDcPort: 443,
+        forceWSS: true,
+        authSessionString: "temp-auth-session",
+        passwordRequired: false,
+        passwordHint: "",
+        passwordChallenge: null,
+      }));
+      const response = encodeConfigResponse("auth:save", {
+        phoneNumber: "+15551234567",
+        loginCode: "99999",
+        password: "",
+        sendMode: "preview",
+        previewChatMessage: false,
+      });
+
+      harness.listeners.get("webviewclosed")({ response });
+      await flushAsyncWork();
+
+      expect(JSON.parse(harness.storage.getItem("tg_pebble:auth_state"))).toEqual({
+        errorMessage: "PHONE_CODE_EXPIRED",
+        phoneNumber: "+15551234567",
+        phoneCodeHash: "",
+        codeDelivery: "",
+        codeRequestedAt: 0,
+        telegramWebDcId: 0,
+        telegramWebDcHost: "",
+        telegramWebDcPort: 0,
+        forceWSS: false,
+        authSessionString: "",
+        passwordRequired: false,
+        passwordHint: "",
+        passwordChallenge: null,
+      });
+      expect(getSentPayloads(harness.sentMessages, "settings_state").at(-1)).toEqual({
+        payload: "preview|0|0|1|error",
+        requestId: 0,
+        syncState: "desynced",
+      });
+    } finally {
+      harness.restore();
+    }
+  });
+
   it("updates settings locally without attempting auth when login credentials are absent", async () => {
     const harness = await loadPkjsHarness();
 

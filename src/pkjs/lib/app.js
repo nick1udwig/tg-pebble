@@ -329,7 +329,7 @@ function createPkjsApp(options) {
       }
       return cache.setSession(session);
     },
-    setAuthError: function(message) {
+    setAuthError: function(message, options) {
       var nextMessage = String(message || "").trim();
       var currentAuthState = cache.getAuthState();
 
@@ -338,6 +338,13 @@ function createPkjsApp(options) {
         return {
           errorMessage: ""
         };
+      }
+
+      if (options && options.clearPendingAuth === true) {
+        return cache.setAuthState({
+          errorMessage: nextMessage,
+          phoneNumber: currentAuthState.phoneNumber
+        });
       }
 
       return cache.setAuthState(Object.assign({}, currentAuthState, {
