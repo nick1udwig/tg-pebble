@@ -305,6 +305,8 @@ var app = createPkjsApp({
   } : null
 });
 var latestChatPageRequestId = 0;
+var chatListSendPromise = null;
+var chatListScheduleTimer = null;
 
 function log(message, extra) {
   var detail = formatLogExtra(extra);
@@ -1072,33 +1074,94 @@ function sendMessageItems(messages, index, requestId, onComplete, onError) {
   );
 }
 
-async function sendChatList() {
+async function sendChatListOnce() {
   var payload = await app.bootstrap();
   var chats = payload.chats || [];
   var settingsState = buildSettingsStatePayload();
 
-  sendEnvelope(MessageType.syncStatus, "", 0, SyncState.syncing, function() {
-    sendEnvelope(MessageType.settingsState, serializeSettingsState(settingsState), 0, SyncState.syncing, function() {
-      sendChatItems(
-        chats,
-        0,
-        function() {
-          app.refreshSucceeded();
-          sendEnvelope(MessageType.chatListComplete, String(chats.length), chats.length, SyncState.synced);
-        },
-        function(error) {
-          log("chat list send failed", error);
-          app.refreshFailed();
-        }
-      );
+  return new Promise(function(resolve, reject) {
+    var settled = false;
+
+    function fail(message, error) {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      log(message, error);
+      app.refreshFailed();
+      reject(error || new Error(message));
+    }
+
+    sendEnvelope(MessageType.syncStatus, "", 0, SyncState.syncing, function() {
+      sendEnvelope(MessageType.settingsState, serializeSettingsState(settingsState), 0, SyncState.syncing, function() {
+        sendChatItems(
+          chats,
+          0,
+          function() {
+            sendEnvelope(
+              MessageType.chatListComplete,
+              String(chats.length),
+              chats.length,
+              SyncState.synced,
+              function() {
+                if (settled) {
+                  return;
+                }
+                settled = true;
+                app.refreshSucceeded();
+                resolve(payload);
+              },
+              function(error) {
+                fail("chat list completion send failed", error);
+              }
+            );
+          },
+          function(error) {
+            fail("chat list send failed", error);
+          }
+        );
+      }, function(error) {
+        fail("settings state send failed", error);
+      });
     }, function(error) {
-      log("settings state send failed", error);
+      fail("sync status send failed", error);
+    });
+  });
+}
+
+function sendChatList() {
+  var pending;
+
+  if (chatListSendPromise) {
+    return chatListSendPromise;
+  }
+
+  pending = sendChatListOnce();
+  chatListSendPromise = pending;
+  pending.then(function() {
+    if (chatListSendPromise === pending) {
+      chatListSendPromise = null;
+    }
+  }, function() {
+    if (chatListSendPromise === pending) {
+      chatListSendPromise = null;
+    }
+  });
+  return pending;
+}
+
+function scheduleChatListSend() {
+  if (chatListScheduleTimer !== null) {
+    return;
+  }
+
+  chatListScheduleTimer = setTimeout(function() {
+    chatListScheduleTimer = null;
+    sendChatList().catch(function(error) {
+      log("sendChatList failed", error);
       app.refreshFailed();
     });
-  }, function(error) {
-    log("sync status send failed", error);
-    app.refreshFailed();
-  });
+  }, 120);
 }
 
 async function sendChatPage(chatId, requestId) {
@@ -1435,12 +1498,7 @@ async function handleRequest(payload) {
   switch (type) {
     case MessageType.appReady:
       app.refreshStarted();
-      setTimeout(function() {
-        sendChatList().catch(function(error) {
-          log("sendChatList failed", error);
-          app.refreshFailed();
-        });
-      }, 120);
+      scheduleChatListSend();
       break;
     case MessageType.openChat:
       latestChatPageRequestId = requestId;
@@ -1484,12 +1542,7 @@ async function handleRequest(payload) {
     case MessageType.clearCache:
       app.refreshStarted();
       app.clearCache();
-      setTimeout(function() {
-        sendChatList().catch(function(error) {
-          log("sendChatList failed", error);
-          app.refreshFailed();
-        });
-      }, 120);
+      scheduleChatListSend();
       break;
     case MessageType.logout:
       await handleLogoutAction();

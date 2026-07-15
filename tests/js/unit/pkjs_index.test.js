@@ -369,6 +369,37 @@ describe("PKJS config auth flow", () => {
     }
   });
 
+  it("coalesces repeated startup chat-list requests", async () => {
+    vi.useFakeTimers();
+    const harness = await loadPkjsHarness();
+    let resolveBootstrap;
+    const bootstrap = vi.fn(() => new Promise((resolve) => {
+      resolveBootstrap = resolve;
+    }));
+    harness.module.app.bootstrap = bootstrap;
+
+    try {
+      await harness.module.handleRequest({ 0: "app_ready" });
+      await vi.advanceTimersByTimeAsync(120);
+      await harness.module.handleRequest({ 0: "app_ready" });
+      await vi.advanceTimersByTimeAsync(120);
+
+      expect(bootstrap).toHaveBeenCalledTimes(1);
+
+      resolveBootstrap({ chats: [] });
+      await vi.runAllTimersAsync();
+
+      expect(getSentPayloads(harness.sentMessages, "sync_status")).toHaveLength(1);
+      expect(getSentPayloads(harness.sentMessages, "settings_state")).toHaveLength(1);
+      expect(getSentPayloads(harness.sentMessages, "chat_list_complete")).toEqual([
+        { payload: "0", requestId: 0, syncState: "synced" },
+      ]);
+    } finally {
+      harness.restore();
+      vi.useRealTimers();
+    }
+  });
+
   it("uses embedded runtime config when env is unavailable", async () => {
     const harness = await loadPkjsHarness({
       env: {
