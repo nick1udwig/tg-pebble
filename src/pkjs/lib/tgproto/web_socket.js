@@ -158,10 +158,11 @@ NativeWebSocketStream.prototype.close = function() {
   }
 };
 
-function buildTelegramWebSocketUrl(endpoint, testServers) {
+function buildTelegramWebSocketUrl(endpoint, testServers, useWSS) {
   var host = endpoint.host;
   var port = Number(endpoint.port || 443);
-  var scheme = port === 443 ? "wss" : "ws";
+  var secure = useWSS == null ? port === 443 : useWSS === true;
+  var scheme = secure ? "wss" : "ws";
 
   return scheme + "://" + host + ":" + port + "/apiws" + (testServers === true ? "_test" : "");
 }

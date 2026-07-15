@@ -398,9 +398,7 @@ function failAuthConfiguration(message) {
 
 var DIRECT_TELEGRAM_WEB_DC = {
   dcId: 2,
-  host: "venus.web.telegram.org",
-  port: 443,
-  useWSS: true
+  host: "venus.web.telegram.org"
 };
 
 var WEBSOCKET_EXPERIMENT_CASES = [
@@ -987,7 +985,13 @@ function startWebSocketControlProbe(endpoint) {
 }
 
 async function resolveTelegramRuntimeConfigForConnect(runtimeConfig) {
-  var resolvedRuntimeConfig = cloneRuntimeConfigWithTelegramWebDc(runtimeConfig, DIRECT_TELEGRAM_WEB_DC);
+  var useWSS = runtimeConfig && runtimeConfig.forceWSS === true;
+  var resolvedRuntimeConfig = cloneRuntimeConfigWithTelegramWebDc(runtimeConfig, {
+    dcId: DIRECT_TELEGRAM_WEB_DC.dcId,
+    host: DIRECT_TELEGRAM_WEB_DC.host,
+    port: useWSS ? 443 : 80,
+    useWSS: useWSS
+  });
 
   if (resolvedRuntimeConfig && resolvedRuntimeConfig.telegramWebDcHost) {
     log("Telegram runtime endpoint selected", {

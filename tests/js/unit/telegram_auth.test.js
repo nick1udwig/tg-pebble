@@ -59,6 +59,19 @@ describe("telegram auth helpers", () => {
     expect(client.session.dcId).toBe(2);
     expect(client.session.serverAddress).toBe("venus.web.telegram.org");
     expect(client.session.port).toBe(443);
+    expect(client.getWebSocketUrl()).toBe("wss://venus.web.telegram.org:443/apiws");
+  });
+
+  it("uses plain WebSocket transport when WSS is disabled", () => {
+    const client = createTelegramClient({
+      apiId: 123456,
+      apiHash: "hash",
+      forceWSS: false,
+      testServers: false,
+    }, "");
+
+    expect(client.session.port).toBe(80);
+    expect(client.getWebSocketUrl()).toBe("ws://venus.web.telegram.org:80/apiws");
   });
 
   it("formats account labels from names and usernames", () => {

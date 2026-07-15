@@ -28,6 +28,8 @@ describe("tgproto transport primitives", () => {
   it("builds Telegram web socket URLs", () => {
     expect(buildTelegramWebSocketUrl(getTelegramWebDc(1), false)).toBe("wss://pluto.web.telegram.org:443/apiws");
     expect(buildTelegramWebSocketUrl(getTelegramWebDc(2), true)).toBe("wss://venus.web.telegram.org:443/apiws_test");
+    expect(buildTelegramWebSocketUrl({ host: "venus.web.telegram.org", port: 80 }, false, false))
+      .toBe("ws://venus.web.telegram.org:80/apiws");
   });
 
   it("encodes abridged packets", () => {

@@ -64,11 +64,14 @@ function createInputPeer(remoteRef) {
 function NativeTelegramClient(options) {
   var host;
   var port;
+  var defaultPort;
 
   this.options = options || {};
+  this.useWSS = this.options.useWSS !== false;
   this.dc = getTelegramWebDc(this.options.dcId || 2);
-  host = String(this.options.host || "").trim();
-  port = Number(this.options.port || this.dc.port || 443);
+  host = String(this.options.host || this.dc.host || "").trim();
+  defaultPort = this.useWSS ? (this.dc.port || 443) : 80;
+  port = Number(this.options.port || defaultPort);
   if (host && isFiniteNumber(port) && port > 0) {
     this.dc = {
       dcId: Number(this.options.dcId || this.dc.dcId),
@@ -112,6 +115,14 @@ NativeTelegramClient.prototype.switchDc = function(dcId) {
   var self = this;
   var dc = getTelegramWebDc(dcId);
 
+  if (!this.useWSS) {
+    dc = {
+      dcId: dc.dcId,
+      host: dc.host,
+      port: 80
+    };
+  }
+
   return this.disconnect().then(function() {
     self.dc = dc;
     self.session.setDC(dc.dcId, dc.host, dc.port);
@@ -124,7 +135,7 @@ NativeTelegramClient.prototype.switchDc = function(dcId) {
 };
 
 NativeTelegramClient.prototype.getWebSocketUrl = function() {
-  return webSocket.buildTelegramWebSocketUrl(this.dc, this.options.testServers === true);
+  return webSocket.buildTelegramWebSocketUrl(this.dc, this.options.testServers === true, this.useWSS);
 };
 
 function getMigrationDc(result) {

@@ -66,6 +66,7 @@ function createTelegramClient(runtimeConfig, sessionString) {
   var dcId;
   var host;
   var port;
+  var useWSS;
 
   if (!runtimeConfig || !isFiniteNumber(runtimeConfig.apiId) || !runtimeConfig.apiHash) {
     throw new Error("Telegram runtime config is incomplete.");
@@ -73,7 +74,8 @@ function createTelegramClient(runtimeConfig, sessionString) {
 
   dcId = Number(runtimeConfig.telegramWebDcId || 2);
   host = String(runtimeConfig.telegramWebDcHost || "").trim();
-  port = Number(runtimeConfig.telegramWebDcPort || 443);
+  useWSS = runtimeConfig.forceWSS === true;
+  port = Number(runtimeConfig.telegramWebDcPort || (useWSS ? 443 : 80));
 
   client = new NativeTelegramClient({
     apiId: runtimeConfig.apiId,
@@ -81,6 +83,7 @@ function createTelegramClient(runtimeConfig, sessionString) {
     dcId: dcId,
     host: host,
     port: port,
+    useWSS: useWSS,
     sessionString: String(sessionString || ""),
     testServers: runtimeConfig.testServers === true,
     deviceModel: String(runtimeConfig.deviceModel || "TG Pebble"),
