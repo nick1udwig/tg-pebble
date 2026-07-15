@@ -14,6 +14,7 @@
 #define TG_HEADER_HEIGHT 24
 #define TG_FOOTER_HEIGHT 18
 #define TG_PREVIEW_SCROLL_HEIGHT 88
+#define TG_SEND_RESULT_TIMEOUT_MS 30000
 
 #define TG_MSG_APP_READY "app_ready"
 #define TG_MSG_OPEN_CHAT "open_chat"
@@ -80,6 +81,7 @@ static TextLayer *s_settings_title_layer;
 static TextLayer *s_settings_sync_layer;
 
 static AppTimer *s_bootstrap_timer;
+static AppTimer *s_send_result_timer;
 
 #if defined(PBL_MICROPHONE)
 static DictationSession *s_dictation_session;
@@ -92,6 +94,7 @@ static size_t s_message_count = 0;
 static bool s_chat_page_loaded = false;
 static char s_chat_page_error[TG_STATUS_TEXT_LENGTH] = "";
 static uint32_t s_chat_page_request_id = 0;
+static uint32_t s_send_request_id = 0;
 
 static int32_t s_active_chat_id = -1;
 static char s_active_chat_title[TG_CHAT_TITLE_LENGTH] = "Chat";
@@ -116,6 +119,8 @@ static void prv_request_chat_list(void);
 static void prv_request_chat_page(int32_t chat_id);
 static void prv_schedule_bootstrap(uint32_t delay_ms);
 static void prv_copy_string(char *dest, size_t dest_size, const char *src);
+static void prv_handle_send_delivery_failure(const char *message);
+static void prv_start_send_result_timer(void);
 
 static TgAuthStep prv_auth_step_from_string(const char *value) {
   if (!value) {
@@ -497,9 +502,17 @@ static void prv_send_preview_message(void) {
   }
 
   (void)snprintf(payload, sizeof(payload), "%ld|%s", (long)s_active_chat_id, s_preview_text);
+  s_send_request_id += 1;
+  if (s_send_request_id == 0) {
+    s_send_request_id = 1;
+  }
   s_waiting_for_send_result = true;
   prv_set_preview_status("Sending...", false);
-  (void)prv_send_request(TG_MSG_SEND_MESSAGE, payload);
+  if (prv_send_request_with_id(TG_MSG_SEND_MESSAGE, payload, s_send_request_id)) {
+    prv_start_send_result_timer();
+  } else {
+    prv_handle_send_delivery_failure("Phone delivery failed. Tap Select to retry.");
+  }
 }
 
 static void prv_show_preview_window(void) {
@@ -509,6 +522,37 @@ static void prv_show_preview_window(void) {
   if (s_preview_window && !window_stack_contains_window(s_preview_window)) {
     window_stack_push(s_preview_window, true);
   }
+}
+
+static void prv_cancel_send_result_timer(void) {
+  if (!s_send_result_timer) {
+    return;
+  }
+
+  app_timer_cancel(s_send_result_timer);
+  s_send_result_timer = NULL;
+}
+
+static void prv_handle_send_delivery_failure(const char *message) {
+  prv_cancel_send_result_timer();
+  s_waiting_for_send_result = false;
+  prv_set_sync_status_from_string("desynced");
+  prv_set_preview_status(message, true);
+  prv_show_preview_window();
+}
+
+static void prv_send_result_timeout(void *context) {
+  (void)context;
+  s_send_result_timer = NULL;
+
+  if (s_waiting_for_send_result) {
+    prv_handle_send_delivery_failure("Send timed out. Tap Select to retry.");
+  }
+}
+
+static void prv_start_send_result_timer(void) {
+  prv_cancel_send_result_timer();
+  s_send_result_timer = app_timer_register(TG_SEND_RESULT_TIMEOUT_MS, prv_send_result_timeout, NULL);
 }
 
 static void prv_push_chat_window_for_selected_row(uint16_t row) {
@@ -759,6 +803,8 @@ static void prv_settings_select_click(struct MenuLayer *menu_layer, MenuIndex *c
       break;
     case 3:
     default:
+      prv_cancel_send_result_timer();
+      s_waiting_for_send_result = false;
       prv_clear_chat_items();
       prv_clear_message_items();
       s_active_chat_id = -1;
@@ -797,6 +843,7 @@ static void prv_preview_click_config_provider(void *context) {
 #if defined(PBL_MICROPHONE)
 static void prv_show_dictation_failure(void) {
   prv_copy_string(s_preview_text, sizeof(s_preview_text), "");
+  prv_cancel_send_result_timer();
   s_waiting_for_send_result = false;
   prv_set_preview_status("Voice input unavailable", true);
   prv_show_preview_window();
@@ -828,7 +875,7 @@ static void prv_chat_select_click(struct MenuLayer *menu_layer, MenuIndex *cell_
   (void)cell_index;
   (void)context;
 
-  if (s_active_chat_id < 0 || !s_dictation_session) {
+  if (s_waiting_for_send_result || s_active_chat_id < 0 || !s_dictation_session) {
     return;
   }
 
@@ -989,11 +1036,19 @@ static void prv_settings_window_unload(Window *window) {
 }
 
 static void prv_outbox_failed(DictionaryIterator *failed, AppMessageResult reason, void *context) {
-  (void)failed;
+  Tuple *type_tuple = failed ? dict_find(failed, MESSAGE_KEY_MessageType) : NULL;
+  Tuple *request_tuple = failed ? dict_find(failed, MESSAGE_KEY_RequestId) : NULL;
+  const char *type = type_tuple ? type_tuple->value->cstring : NULL;
+  uint32_t request_id = request_tuple ? request_tuple->value->uint32 : 0;
+
   (void)context;
   APP_LOG(APP_LOG_LEVEL_WARNING, "Outbox failed: %d", (int)reason);
   if (reason == APP_MSG_NOT_CONNECTED || reason == APP_MSG_SEND_TIMEOUT) {
     prv_set_sync_status_from_string("desynced");
+  }
+  if (type && strcmp(type, TG_MSG_SEND_MESSAGE) == 0 && request_id == s_send_request_id &&
+      s_waiting_for_send_result) {
+    prv_handle_send_delivery_failure("Phone delivery failed. Tap Select to retry.");
   }
 }
 
@@ -1016,6 +1071,7 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
   const char *payload = payload_tuple ? payload_tuple->value->cstring : "";
   uint32_t request_id = request_tuple ? request_tuple->value->uint32 : 0;
   bool is_chat_page_response = false;
+  bool is_send_response = false;
 
   (void)context;
 
@@ -1028,6 +1084,10 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
                           strcmp(type, TG_MSG_CHAT_PAGE_ERROR) == 0 ||
                           (strcmp(type, TG_MSG_SYNC_STATUS) == 0 && request_id != 0);
   if (is_chat_page_response && request_id != s_chat_page_request_id) {
+    return;
+  }
+  is_send_response = strcmp(type, TG_MSG_SEND_RESULT) == 0;
+  if (is_send_response && request_id != s_send_request_id) {
     return;
   }
 
@@ -1146,6 +1206,7 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
   if (strcmp(type, TG_MSG_SEND_RESULT) == 0) {
     TgParsedSendResult parsed;
 
+    prv_cancel_send_result_timer();
     s_waiting_for_send_result = false;
     if (!tg_parse_send_result_payload(payload, &parsed)) {
       prv_set_preview_status("Send failed.", true);
@@ -1215,6 +1276,7 @@ static void prv_deinit(void) {
   if (s_bootstrap_timer) {
     app_timer_cancel(s_bootstrap_timer);
   }
+  prv_cancel_send_result_timer();
   prv_sync_status_animation_stop();
 
 #if defined(PBL_MICROPHONE)

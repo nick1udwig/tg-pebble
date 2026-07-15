@@ -1520,12 +1520,12 @@ async function handleRequest(payload) {
       var result = await app.sendMessage(chatId, text);
 
       if (result.ok) {
-        sendEnvelope(MessageType.sendResult, serializeSendResult({ ok: true }), 0, app.getSyncState());
+        sendEnvelope(MessageType.sendResult, serializeSendResult({ ok: true }), requestId, app.getSyncState());
       } else {
         sendEnvelope(
           MessageType.sendResult,
           serializeSendResult({ ok: false, detail: result.detail }),
-          0,
+          requestId,
           SyncState.desynced
         );
       }

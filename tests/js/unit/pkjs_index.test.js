@@ -400,6 +400,22 @@ describe("PKJS config auth flow", () => {
     }
   });
 
+  it("correlates send results with the originating watch request", async () => {
+    const harness = await loadPkjsHarness();
+    harness.module.app.sendMessage = vi.fn(async () => ({ ok: true }));
+
+    try {
+      await harness.module.handleRequest({ 0: "send_message", 1: "1001|Hello", 2: 77 });
+
+      expect(harness.module.app.sendMessage).toHaveBeenCalledWith("1001", "Hello");
+      expect(getSentPayloads(harness.sentMessages, "send_result")).toEqual([
+        { payload: "ok", requestId: 77, syncState: "desynced" },
+      ]);
+    } finally {
+      harness.restore();
+    }
+  });
+
   it("uses embedded runtime config when env is unavailable", async () => {
     const harness = await loadPkjsHarness({
       env: {
