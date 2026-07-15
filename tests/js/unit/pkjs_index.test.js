@@ -348,6 +348,27 @@ describe("PKJS config auth flow", () => {
     }
   });
 
+  it("drops stale chat page work and correlates the latest response", async () => {
+    vi.useFakeTimers();
+    const harness = await loadPkjsHarness();
+
+    try {
+      await harness.module.handleRequest({ 0: "open_chat", 1: "1001", 2: 41 });
+      await harness.module.handleRequest({ 0: "open_chat", 1: "2001", 2: 42 });
+      await vi.runAllTimersAsync();
+
+      expect(getSentPayloads(harness.sentMessages, "chat_page_complete")).toEqual([
+        { payload: "2001", requestId: 42, syncState: "synced" },
+      ]);
+      expect(getSentPayloads(harness.sentMessages, "sync_status")).toEqual([
+        { payload: "", requestId: 42, syncState: "syncing" },
+      ]);
+    } finally {
+      harness.restore();
+      vi.useRealTimers();
+    }
+  });
+
   it("uses embedded runtime config when env is unavailable", async () => {
     const harness = await loadPkjsHarness({
       env: {

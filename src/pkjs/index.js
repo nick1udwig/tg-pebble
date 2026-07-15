@@ -304,6 +304,7 @@ var app = createPkjsApp({
     });
   } : null
 });
+var latestChatPageRequestId = 0;
 
 function log(message, extra) {
   var detail = formatLogExtra(extra);
@@ -1049,7 +1050,11 @@ function sendChatItems(chats, index, onComplete, onError) {
   );
 }
 
-function sendMessageItems(messages, index, onComplete, onError) {
+function sendMessageItems(messages, index, requestId, onComplete, onError) {
+  if (requestId !== latestChatPageRequestId) {
+    return;
+  }
+
   if (index >= messages.length) {
     onComplete();
     return;
@@ -1057,11 +1062,11 @@ function sendMessageItems(messages, index, onComplete, onError) {
 
   sendEnvelope(
     MessageType.messageItem,
-    serializeMessageItem(messages[index]),
-    index,
+    serializeMessageItem(messages[index], index),
+    requestId,
     SyncState.syncing,
     function() {
-      sendMessageItems(messages, index + 1, onComplete, onError);
+      sendMessageItems(messages, index + 1, requestId, onComplete, onError);
     },
     onError
   );
@@ -1096,17 +1101,25 @@ async function sendChatList() {
   });
 }
 
-async function sendChatPage(chatId) {
+async function sendChatPage(chatId, requestId) {
   var payload = await app.getChatPage(chatId);
   var messages = payload.messages || [];
 
-  sendEnvelope(MessageType.syncStatus, "", 0, SyncState.syncing, function() {
+  if (requestId !== latestChatPageRequestId) {
+    return;
+  }
+
+  sendEnvelope(MessageType.syncStatus, "", requestId, SyncState.syncing, function() {
+    if (requestId !== latestChatPageRequestId) {
+      return;
+    }
+
     if (payload.errorMessage) {
       app.refreshFailed();
       sendEnvelope(
         MessageType.chatPageError,
         serializeChatPageError({ detail: payload.errorMessage }),
-        0,
+        requestId,
         SyncState.desynced
       );
       return;
@@ -1115,16 +1128,26 @@ async function sendChatPage(chatId) {
     sendMessageItems(
       messages,
       0,
+      requestId,
       function() {
+        if (requestId !== latestChatPageRequestId) {
+          return;
+        }
         app.refreshSucceeded();
-        sendEnvelope(MessageType.chatPageComplete, String(payload.chatId), messages.length, SyncState.synced);
+        sendEnvelope(MessageType.chatPageComplete, String(payload.chatId), requestId, SyncState.synced);
       },
       function(error) {
+        if (requestId !== latestChatPageRequestId) {
+          return;
+        }
         log("chat page send failed", error);
         app.refreshFailed();
       }
     );
   }, function(error) {
+    if (requestId !== latestChatPageRequestId) {
+      return;
+    }
     log("sync status send failed", error);
     app.refreshFailed();
   });
@@ -1398,9 +1421,15 @@ async function handleConfigAction(actionPayload) {
 async function handleRequest(payload) {
   var type = readPayloadValue(payload, 0, "MessageType");
   var payloadString = readPayloadValue(payload, 1, "PayloadJson");
+  var requestId = Number(readPayloadValue(payload, 2, "RequestId"));
 
   if (payloadString == null) {
     payloadString = "";
+  }
+  if (!isFiniteNumber(requestId) || requestId < 0) {
+    requestId = 0;
+  } else {
+    requestId = requestId >>> 0;
   }
 
   switch (type) {
@@ -1414,9 +1443,13 @@ async function handleRequest(payload) {
       }, 120);
       break;
     case MessageType.openChat:
+      latestChatPageRequestId = requestId;
       app.refreshStarted();
       setTimeout(function() {
-        sendChatPage(payloadString).catch(function(error) {
+        sendChatPage(payloadString, requestId).catch(function(error) {
+          if (requestId !== latestChatPageRequestId) {
+            return;
+          }
           log("sendChatPage failed", error);
           app.refreshFailed();
         });

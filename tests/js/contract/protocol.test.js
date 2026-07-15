@@ -75,8 +75,8 @@ describe("watch/pkjs protocol fixtures", () => {
     ).toBe("1001|Alice|See you soon|2");
 
     expect(
-      serializeMessageItem({ senderName: "Alice", showSender: true, outgoing: false, text: "Morning" }),
-    ).toBe("Alice|1|0|Morning");
+      serializeMessageItem({ senderName: "Alice", showSender: true, outgoing: false, text: "Morning" }, 3),
+    ).toBe("3|Alice|1|0|Morning");
 
     expect(serializeChatPageError({ detail: "PEER_ID_INVALID" })).toBe("PEER_ID_INVALID");
     expect(serializeSendResult({ ok: true })).toBe("ok");
@@ -123,16 +123,17 @@ describe("watch/pkjs protocol fixtures", () => {
       showSender: true,
       outgoing: false,
       text: longText,
-    });
+    }, 7);
     const sendResultPayload = serializeSendResult({ ok: false, detail: longError });
     const chatPageErrorPayload = serializeChatPageError({ detail: longError });
 
     const [chatId, title, preview, unreadCount] = chatPayload.split("|");
-    const [sender, showSender, outgoing, text] = messagePayload.split("|");
+    const [messageIndex, sender, showSender, outgoing, text] = messagePayload.split("|");
     const [, errorDetail] = sendResultPayload.split("|");
 
     expect(chatId).toBe("1001");
     expect(unreadCount).toBe("2");
+    expect(messageIndex).toBe("7");
     expect(showSender).toBe("1");
     expect(outgoing).toBe("0");
 

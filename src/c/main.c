@@ -91,6 +91,7 @@ static size_t s_chat_count = 0;
 static size_t s_message_count = 0;
 static bool s_chat_page_loaded = false;
 static char s_chat_page_error[TG_STATUS_TEXT_LENGTH] = "";
+static uint32_t s_chat_page_request_id = 0;
 
 static int32_t s_active_chat_id = -1;
 static char s_active_chat_title[TG_CHAT_TITLE_LENGTH] = "Chat";
@@ -370,7 +371,7 @@ static void prv_update_preview_contents(void) {
   scroll_layer_set_content_size(s_preview_scroll_layer, GSize(bounds.size.w, text_size.h));
 }
 
-static bool prv_send_request(const char *type, const char *payload) {
+static bool prv_send_request_with_id(const char *type, const char *payload, uint32_t request_id) {
   DictionaryIterator *iter = NULL;
 
   if (app_message_outbox_begin(&iter) != APP_MSG_OK || !iter) {
@@ -382,6 +383,9 @@ static bool prv_send_request(const char *type, const char *payload) {
   if (payload && payload[0] != '\0') {
     dict_write_cstring(iter, MESSAGE_KEY_PayloadJson, payload);
   }
+  if (request_id != 0) {
+    dict_write_uint32(iter, MESSAGE_KEY_RequestId, request_id);
+  }
 
   if (app_message_outbox_send() != APP_MSG_OK) {
     APP_LOG(APP_LOG_LEVEL_ERROR, "Failed to send message type %s", type);
@@ -389,6 +393,10 @@ static bool prv_send_request(const char *type, const char *payload) {
   }
 
   return true;
+}
+
+static bool prv_send_request(const char *type, const char *payload) {
+  return prv_send_request_with_id(type, payload, 0);
 }
 
 static void prv_bootstrap_timer_callback(void *context) {
@@ -438,10 +446,14 @@ static void prv_request_chat_list(void) {
 
 static void prv_request_chat_page(int32_t chat_id) {
   char payload[16];
+  s_chat_page_request_id += 1;
+  if (s_chat_page_request_id == 0) {
+    s_chat_page_request_id = 1;
+  }
   prv_clear_message_items();
   prv_set_sync_status_from_string("syncing");
   (void)snprintf(payload, sizeof(payload), "%ld", (long)chat_id);
-  (void)prv_send_request(TG_MSG_OPEN_CHAT, payload);
+  (void)prv_send_request_with_id(TG_MSG_OPEN_CHAT, payload, s_chat_page_request_id);
 }
 
 static void prv_append_outgoing_message(const char *text) {
@@ -1003,15 +1015,24 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
   const char *type = type_tuple ? type_tuple->value->cstring : NULL;
   const char *payload = payload_tuple ? payload_tuple->value->cstring : "";
   uint32_t request_id = request_tuple ? request_tuple->value->uint32 : 0;
+  bool is_chat_page_response = false;
 
   (void)context;
 
-  if (sync_tuple) {
-    prv_set_sync_status_from_string(sync_tuple->value->cstring);
-  }
-
   if (!type) {
     return;
+  }
+
+  is_chat_page_response = strcmp(type, TG_MSG_MESSAGE_ITEM) == 0 ||
+                          strcmp(type, TG_MSG_CHAT_PAGE_COMPLETE) == 0 ||
+                          strcmp(type, TG_MSG_CHAT_PAGE_ERROR) == 0 ||
+                          (strcmp(type, TG_MSG_SYNC_STATUS) == 0 && request_id != 0);
+  if (is_chat_page_response && request_id != s_chat_page_request_id) {
+    return;
+  }
+
+  if (sync_tuple) {
+    prv_set_sync_status_from_string(sync_tuple->value->cstring);
   }
 
   s_has_received_inbox = true;
@@ -1083,14 +1104,14 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
   if (strcmp(type, TG_MSG_MESSAGE_ITEM) == 0) {
     TgParsedMessageItem parsed;
 
-    if (request_id < TG_MAX_MESSAGES && tg_parse_message_item_payload(payload, &parsed)) {
+    if (tg_parse_message_item_payload(payload, &parsed) && parsed.index < TG_MAX_MESSAGES) {
       s_chat_page_error[0] = '\0';
-      s_messages[request_id].show_sender = parsed.show_sender;
-      s_messages[request_id].outgoing = parsed.outgoing;
-      prv_copy_string(s_messages[request_id].sender, sizeof(s_messages[request_id].sender), parsed.sender);
-      prv_copy_string(s_messages[request_id].text, sizeof(s_messages[request_id].text), parsed.text);
-      if (request_id + 1 > s_message_count) {
-        s_message_count = request_id + 1;
+      s_messages[parsed.index].show_sender = parsed.show_sender;
+      s_messages[parsed.index].outgoing = parsed.outgoing;
+      prv_copy_string(s_messages[parsed.index].sender, sizeof(s_messages[parsed.index].sender), parsed.sender);
+      prv_copy_string(s_messages[parsed.index].text, sizeof(s_messages[parsed.index].text), parsed.text);
+      if (parsed.index + 1 > s_message_count) {
+        s_message_count = parsed.index + 1;
       }
       if (s_chat_menu_layer) {
         menu_layer_reload_data(s_chat_menu_layer);

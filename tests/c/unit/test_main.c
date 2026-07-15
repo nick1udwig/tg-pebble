@@ -133,7 +133,8 @@ static void test_parse_chat_item_payload_rejects_overflowing_numbers(void) {
 static void test_parse_message_item_payload(void) {
   TgParsedMessageItem item;
 
-  ASSERT_TRUE(tg_parse_message_item_payload("Alice|1|0|Morning", &item));
+  ASSERT_TRUE(tg_parse_message_item_payload("3|Alice|1|0|Morning", &item));
+  ASSERT_TRUE(item.index == 3);
   ASSERT_TRUE(item.show_sender);
   ASSERT_TRUE(!item.outgoing);
   ASSERT_STREQ("Alice", item.sender);
@@ -143,7 +144,7 @@ static void test_parse_message_item_payload(void) {
 static void test_parse_message_item_payload_truncates_to_valid_utf8(void) {
   TgParsedMessageItem item;
   const char *payload =
-      "Telegram|1|0|Login code: 31792. Do not give this code to anyone, even if they say they are from Telegram!\n\n"
+      "0|Telegram|1|0|Login code: 31792. Do not give this code to anyone, even if they say they are from Telegram!\n\n"
       "\xE2\x9D\x97\xEF\xB8\x8F"
       "This code can be used to log in to your Telegram account. We never ask it for anything else.";
 
@@ -153,6 +154,13 @@ static void test_parse_message_item_payload_truncates_to_valid_utf8(void) {
   ASSERT_STREQ("Telegram", item.sender);
   ASSERT_TRUE(strncmp(item.text, "Login code: 31792.", 18) == 0);
   ASSERT_TRUE(is_valid_utf8(item.text));
+}
+
+static void test_parse_message_item_payload_rejects_invalid_index(void) {
+  TgParsedMessageItem item;
+
+  ASSERT_TRUE(!tg_parse_message_item_payload("nope|Alice|1|0|Morning", &item));
+  ASSERT_TRUE(!tg_parse_message_item_payload("4294967296|Alice|1|0|Morning", &item));
 }
 
 static void test_parse_send_result_payload(void) {
@@ -215,6 +223,7 @@ int main(void) {
   test_parse_chat_item_payload_rejects_overflowing_numbers();
   test_parse_message_item_payload();
   test_parse_message_item_payload_truncates_to_valid_utf8();
+  test_parse_message_item_payload_rejects_invalid_index();
   test_parse_send_result_payload();
   test_parse_send_result_payload_truncates_to_valid_utf8();
 

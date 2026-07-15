@@ -19,6 +19,7 @@ typedef struct {
 } TgParsedChatItem;
 
 typedef struct {
+  uint32_t index;
   bool show_sender;
   bool outgoing;
   char sender[TG_MESSAGE_SENDER_LENGTH];

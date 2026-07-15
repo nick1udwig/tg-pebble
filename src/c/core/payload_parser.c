@@ -157,20 +157,28 @@ bool tg_parse_chat_item_payload(const char *payload, TgParsedChatItem *out) {
 
 bool tg_parse_message_item_payload(const char *payload, TgParsedMessageItem *out) {
   const char *cursor = payload;
+  char index_buffer[16];
   char show_sender_buffer[4];
   char outgoing_buffer[4];
+  uint32_t index = 0;
 
   if (!payload || !out) {
     return false;
   }
 
-  if (!prv_next_field(&cursor, out->sender, sizeof(out->sender)) ||
+  if (!prv_next_field(&cursor, index_buffer, sizeof(index_buffer)) ||
+      !prv_next_field(&cursor, out->sender, sizeof(out->sender)) ||
       !prv_next_field(&cursor, show_sender_buffer, sizeof(show_sender_buffer)) ||
       !prv_next_field(&cursor, outgoing_buffer, sizeof(outgoing_buffer)) ||
       !prv_next_field(&cursor, out->text, sizeof(out->text))) {
     return false;
   }
 
+  if (!prv_parse_uint_field(index_buffer, &index)) {
+    return false;
+  }
+
+  out->index = index;
   out->show_sender = prv_parse_bool_field(show_sender_buffer);
   out->outgoing = prv_parse_bool_field(outgoing_buffer);
   return true;

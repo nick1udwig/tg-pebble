@@ -181,8 +181,9 @@ function serializeChatItem(chat) {
   ].join("|");
 }
 
-function serializeMessageItem(message) {
+function serializeMessageItem(message, index) {
   return [
+    sanitizeField(index == null ? 0 : index),
     sanitizeField(message.senderName, ProtocolByteLimit.messageSender),
     message.showSender ? "1" : "0",
     message.outgoing ? "1" : "0",
