@@ -323,6 +323,60 @@ describe("createPkjsApp", () => {
     });
   });
 
+  it("keeps full live results while persisting only the compact warm cache", async () => {
+    const chats = Array.from({ length: 20 }, (_, index) => ({
+      id: index + 1,
+      remoteId: `user:${index + 1}`,
+      title: `Chat ${index + 1}`,
+      preview: `Latest message ${index + 1}`,
+      unreadCount: index,
+    }));
+    const messages = Array.from({ length: 20 }, (_, index) => ({
+      senderId: String(index + 1),
+      senderName: `Sender ${index + 1}`,
+      outgoing: false,
+      text: `Message ${index + 1}`,
+      showSender: true,
+    }));
+    const app = createPkjsApp({
+      storage: createMemoryStorage(),
+      fixtureMode: false,
+      initialSession: { sessionString: "live-session" },
+      telegramAdapterFactory() {
+        return {
+          isConfigured() {
+            return true;
+          },
+          async hydrateChatList() {
+            return {
+              chats,
+              chatRefs: Object.fromEntries(chats.map((chat) => [chat.id, {
+                peerKey: chat.remoteId,
+                peerType: "user",
+                peerId: String(chat.id),
+                accessHash: String(chat.id * 10),
+              }])),
+            };
+          },
+          async hydrateChatPage() {
+            return { chatId: 1, messages };
+          },
+        };
+      },
+    });
+
+    const chatList = await app.bootstrap();
+    const chatPage = await app.getChatPage(1);
+
+    expect(chatList.chats).toHaveLength(20);
+    expect(chatList.chats.at(-1)).toMatchObject({ id: 20, title: "Chat 20" });
+    expect(chatPage.messages).toHaveLength(20);
+    expect(chatPage.messages.at(0).text).toBe("Message 1");
+    expect(app.cache.getChatList().length).toBeLessThan(20);
+    expect(app.cache.getMessagePages()[1]).toHaveLength(4);
+    expect(app.cache.getMessagePages()[1][0].text).toBe("Message 17");
+  });
+
   it("reports Telegram chat page hydrate errors", async () => {
     const logMessages = [];
     const app = createPkjsApp({

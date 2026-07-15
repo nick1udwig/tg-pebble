@@ -34,6 +34,9 @@ function createPkjsApp(options) {
   var existingSessionString = existingSession && existingSession.sessionString
     ? String(existingSession.sessionString)
     : "";
+  var liveChatList;
+  var liveMessagePages;
+  var liveChatRefs;
 
   if (incomingSessionString && existingSessionString !== incomingSessionString) {
     cache.clearAuthState();
@@ -42,6 +45,10 @@ function createPkjsApp(options) {
   } else if (options.initialSession && !existingSession) {
     cache.setSession(options.initialSession);
   }
+
+  liveChatList = cache.getChatList();
+  liveMessagePages = cache.getMessagePages();
+  liveChatRefs = cache.getChatRefs();
 
   function hasLiveSession() {
     var session = cache.getSession();
@@ -62,15 +69,17 @@ function createPkjsApp(options) {
     cache.setChatList(fixtureState.chats);
     cache.setMessagePages(fixtureState.messagePages);
     cache.setChatRefs({});
+    liveChatList = fixtureState.chats;
+    liveMessagePages = fixtureState.messagePages;
+    liveChatRefs = {};
   }
 
   function findChat(chatId) {
-    var chats = cache.getChatList();
     var index;
 
-    for (index = 0; index < chats.length; index += 1) {
-      if (String(chats[index].id) === String(chatId)) {
-        return chats[index];
+    for (index = 0; index < liveChatList.length; index += 1) {
+      if (String(liveChatList[index].id) === String(chatId)) {
+        return liveChatList[index];
       }
     }
 
@@ -78,8 +87,7 @@ function createPkjsApp(options) {
   }
 
   function getChatRef(chatId) {
-    var refs = cache.getChatRefs();
-    return refs[String(chatId)] || null;
+    return liveChatRefs[String(chatId)] || null;
   }
 
   function getTelegramAdapter() {
@@ -116,33 +124,31 @@ function createPkjsApp(options) {
 
   function buildCurrentChatListPayload() {
     return buildChatListPagePayload({
-      chats: cache.getChatList(),
+      chats: liveChatList,
       syncState: syncState
     });
   }
 
   function buildCurrentChatPagePayload(chatId) {
-    var pages = cache.getMessagePages();
-
     return buildChatPagePayload({
       chatId: chatId,
-      messages: pages[chatId] || [],
+      messages: liveMessagePages[chatId] || [],
       syncState: syncState
     });
   }
 
   function updateMessagePage(chatId, messages) {
-    var pages = cache.getMessagePages();
     var nextPages = {};
     var key;
 
-    for (key in pages) {
-      if (Object.prototype.hasOwnProperty.call(pages, key)) {
-        nextPages[key] = pages[key];
+    for (key in liveMessagePages) {
+      if (Object.prototype.hasOwnProperty.call(liveMessagePages, key)) {
+        nextPages[key] = liveMessagePages[key];
       }
     }
 
     nextPages[chatId] = messages;
+    liveMessagePages = nextPages;
     cache.setMessagePages(nextPages);
   }
 
@@ -194,29 +200,26 @@ function createPkjsApp(options) {
   }
 
   function updateChatPreview(chatId, previewText) {
-    var chats = cache.getChatList();
     var nextChats = [];
     var index;
 
-    for (index = 0; index < chats.length; index += 1) {
-      if (String(chats[index].id) === String(chatId)) {
-        nextChats.push({
-          id: chats[index].id,
-          remoteId: chats[index].remoteId,
-          title: chats[index].title,
+    for (index = 0; index < liveChatList.length; index += 1) {
+      if (String(liveChatList[index].id) === String(chatId)) {
+        nextChats.push(assign({}, liveChatList[index], {
           preview: previewText,
           unreadCount: 0
-        });
+        }));
       } else {
-        nextChats.push(chats[index]);
+        nextChats.push(liveChatList[index]);
       }
     }
 
+    liveChatList = nextChats;
     cache.setChatList(nextChats);
   }
 
   function appendOutgoingMessageToCache(chatId, text) {
-    var existingMessages = cache.getMessagePages()[chatId] || [];
+    var existingMessages = liveMessagePages[chatId] || [];
     var nextMessages = existingMessages.slice();
 
     nextMessages.push({
@@ -255,10 +258,12 @@ function createPkjsApp(options) {
       try {
         result = await adapter.hydrateChatList({
           limit: 20,
-          cachedRefs: cache.getChatRefs()
+          cachedRefs: liveChatRefs
         });
-        cache.setChatList(result.chats || []);
-        cache.setChatRefs(result.chatRefs || {});
+        liveChatList = result.chats || [];
+        liveChatRefs = result.chatRefs || {};
+        cache.setChatList(liveChatList);
+        cache.setChatRefs(liveChatRefs);
       } catch (error) {
         logger("hydrateChatList failed", error);
       }
@@ -276,7 +281,7 @@ function createPkjsApp(options) {
 
       if (adapter && adapter.isConfigured && adapter.isConfigured() && ref) {
         try {
-          var cachedMessages = cache.getMessagePages()[chatId] || [];
+          var cachedMessages = liveMessagePages[chatId] || [];
           result = await adapter.hydrateChatPage({
             chatId: chatId,
             remoteRef: ref,
@@ -306,10 +311,16 @@ function createPkjsApp(options) {
     },
     clearCache: function() {
       cache.clearChatsAndMessages();
+      liveChatList = [];
+      liveMessagePages = {};
+      liveChatRefs = {};
       syncState = SyncState.desynced;
     },
     rehydrateFixtures: async function() {
       cache.clearChatsAndMessages();
+      liveChatList = [];
+      liveMessagePages = {};
+      liveChatRefs = {};
       ensureFixtureCache();
       return this.bootstrap();
     },
@@ -435,8 +446,8 @@ function createPkjsApp(options) {
       var sendResult;
 
       ensureFixtureCache();
-      chatList = cache.getChatList();
-      messagePages = cache.getMessagePages();
+      chatList = liveChatList;
+      messagePages = liveMessagePages;
       nextText = String(text == null ? "" : text).trim();
 
       if (nextText.length === 0) {
@@ -498,25 +509,27 @@ function createPkjsApp(options) {
       nextChats = [];
       for (index = 0; index < chatList.length; index += 1) {
         if (String(chatList[index].id) === String(chatId)) {
-          nextChats.push({
-            id: chatList[index].id,
-            remoteId: chatList[index].remoteId,
-            title: chatList[index].title,
+          nextChats.push(assign({}, chatList[index], {
             preview: nextText,
             unreadCount: 0
-          });
+          }));
         } else {
           nextChats.push(chatList[index]);
         }
       }
 
-      cache.setMessagePages(nextPages);
-      cache.setChatList(nextChats);
+      liveMessagePages = nextPages;
+      liveChatList = nextChats;
+      cache.setMessagePages(liveMessagePages);
+      cache.setChatList(liveChatList);
 
       return { ok: true };
     },
     logout: function() {
       cache.clearAll();
+      liveChatList = [];
+      liveMessagePages = {};
+      liveChatRefs = {};
       syncState = SyncState.desynced;
     },
     getTransport: function() {
