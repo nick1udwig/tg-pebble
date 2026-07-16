@@ -8,7 +8,10 @@ import {
   readPlainMessage,
   writePlainMessage,
 } from "../../../src/pkjs/lib/tgproto/mtproto.js";
-import { NativeMtProtoSender } from "../../../src/pkjs/lib/tgproto/sender.js";
+import {
+  NativeMtProtoSender,
+  createTransportError,
+} from "../../../src/pkjs/lib/tgproto/sender.js";
 
 function createIdentityCtr() {
   return {
@@ -63,6 +66,18 @@ describe("tgproto MTProto state", () => {
 });
 
 describe("native MTProto sender", () => {
+  it("decodes Telegram's four-byte transport errors before decryption", () => {
+    const error = createTransportError(new Uint8Array([0x6c, 0xfe, 0xff, 0xff]));
+
+    expect(error).toMatchObject({
+      name: "TelegramTransportError",
+      errorCode: -404,
+      transportErrorCode: -404,
+    });
+    expect(error.message).toContain("auth key not found");
+    expect(createTransportError(new Uint8Array(8))).toBeNull();
+  });
+
   it("opens the PKJS-compatible obfuscated abridged transport", async () => {
     const stream = createFakeStream();
     const sender = new NativeMtProtoSender({

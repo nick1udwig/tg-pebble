@@ -11,6 +11,29 @@ var webSocket = require("./web_socket");
 
 var RPC_RESULT_ID = 0xf35c6d01;
 var MSG_CONTAINER_ID = 0x73f1f8dc;
+var TRANSPORT_ERROR_DESCRIPTIONS = {
+  "-404": "auth key not found",
+  "-429": "transport flood",
+  "-444": "invalid data center"
+};
+
+function createTransportError(packet) {
+  var code;
+  var description;
+  var error;
+
+  if (!packet || packet.length !== 4) {
+    return null;
+  }
+
+  code = new bytes.ByteReader(packet).readInt32();
+  description = TRANSPORT_ERROR_DESCRIPTIONS[String(code)] || "transport rejected";
+  error = new Error("Telegram transport error " + code + ": " + description + ".");
+  error.name = "TelegramTransportError";
+  error.errorCode = code;
+  error.transportErrorCode = code;
+  return error;
+}
 
 function isServiceMessage(result) {
   var name = result && result.tlName;
@@ -174,6 +197,10 @@ NativeMtProtoSender.prototype.invoke = function(message) {
 
   function receiveResult(retriedAfterSalt) {
     return self.transport.recv().then(function(responsePacket) {
+      var transportError = createTransportError(responsePacket);
+      if (transportError) {
+        throw transportError;
+      }
       return self.state.unwrapEncrypted(responsePacket, self.cryptoProvider);
     }).then(function(messageBody) {
       var result = readRpcResultBody(request, messageBody.body);
@@ -212,6 +239,7 @@ module.exports = {
   MSG_CONTAINER_ID: MSG_CONTAINER_ID,
   NativeMtProtoSender: NativeMtProtoSender,
   RPC_RESULT_ID: RPC_RESULT_ID,
+  createTransportError: createTransportError,
   isServiceMessage: isServiceMessage,
   readRpcResultBody: readRpcResultBody
 };
