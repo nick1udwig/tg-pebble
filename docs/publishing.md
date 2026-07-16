@@ -46,6 +46,7 @@ npm run build:watch
 ```
 
 `TG_PEBBLE_APP_CONFIG_URL` defaults to the GitHub Pages config URL above when omitted.
+`TG_PEBBLE_APP_FORCE_WSS` defaults to `1`, selecting Telegram's secure web endpoint on port 443.
 
 ## Precedence Rules
 

@@ -33,8 +33,8 @@ This calls `scripts/build-and-install-phone.sh`.
    - `TG_PEBBLE_APP_API_ID`
    - `TG_PEBBLE_APP_API_HASH`
 3. Sets phone-side Telegram transport settings:
-   - `TG_PEBBLE_APP_FORCE_WSS=0` by default.
-   - `TG_TEST_USE_WSS` is intentionally not copied from `.env.telegram.test`; it is for Node-side tests, while Pebble PKJS currently needs plain WebSocket MTProto.
+   - `TG_PEBBLE_APP_FORCE_WSS=1` by default so Core Devices iOS uses Telegram's secure web endpoint on port 443.
+   - `TG_TEST_USE_WSS` is intentionally not copied from `.env.telegram.test`; it is for Node-side tests, while phone builds use the app-specific secure transport default above.
    - `TG_TEST_SERVERS` -> `TG_PEBBLE_APP_TEST_SERVERS`
 4. Sets `TG_PEBBLE_APP_CONFIG_URL`.
    - Uses an existing environment value if present.
@@ -62,7 +62,7 @@ After a successful install, open the app settings from the Pebble app. The confi
 ### Troubleshooting
 
 - If the script says `.env.telegram.test` is missing, create it from `.env.telegram.test.example`.
-- If Telegram never sends a login code and logs stop at `Connecting to ...:443/TCPObfuscated2`, the build likely forced WSS. Re-run `npm run deploy:phone` and confirm the script prints `Telegram transport WSS enabled: 0`.
+- If Telegram never sends a login code and logs show `venus.web.telegram.org:80` or an immediate WebSocket error, the build selected cleartext transport. Re-run `npm run deploy:phone` and confirm the script prints `Telegram transport WSS enabled: 1`.
 - If the config page opens as localhost, the PBW was built without embedded Telegram credentials. Re-run `npm run deploy:phone`.
 - If the phone install fails, verify the Pebble phone app is running, paired, and reachable by `pebble install --phone`.
 - If the config page URL is wrong, rerun with:

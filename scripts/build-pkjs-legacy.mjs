@@ -48,7 +48,7 @@ function buildEmbeddedRuntimeConfigFromEnv(env) {
   return {
     apiId,
     apiHash,
-    forceWSS: parseBoolean(env.TG_PEBBLE_APP_FORCE_WSS, false),
+    forceWSS: parseBoolean(env.TG_PEBBLE_APP_FORCE_WSS, true),
     testServers: parseBoolean(env.TG_PEBBLE_APP_TEST_SERVERS, false),
     configUrl: String(env.TG_PEBBLE_APP_CONFIG_URL || DEFAULT_PUBLISHED_CONFIG_URL),
   };
