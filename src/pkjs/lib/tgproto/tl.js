@@ -1,6 +1,6 @@
 "use strict";
 
-var pako = require("pako");
+var inflate = require("pako/lib/inflate.js").inflate;
 
 var bytes = require("./bytes");
 var schema = require("./tl_schema_compiled");
@@ -611,7 +611,7 @@ function readObject(reader) {
   }
 
   if (id === GZIP_PACKED_CONSTRUCTOR_ID) {
-    return deserializeObject(pako.inflate(reader.readTlBytes()));
+    return deserializeObject(inflate(reader.readTlBytes()));
   }
 
   def = getDefinitionById(id);
