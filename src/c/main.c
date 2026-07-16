@@ -10,7 +10,7 @@
 #include "core/unread_badge.h"
 
 #define TG_MAX_CHATS 20
-#define TG_MAX_MESSAGES 40
+#define TG_MAX_MESSAGES 20
 #define TG_HEADER_HEIGHT 24
 #define TG_FOOTER_HEIGHT 18
 #define TG_PREVIEW_SCROLL_HEIGHT 88
