@@ -154,6 +154,9 @@ PY
 wait_for_dictation_preview() {
   local screenshot_path="$1"
   local attempts="${2:-24}"
+  local stable_screenshot_path="${screenshot_path%.ppm}-stable.ppm"
+
+  rm -f "${stable_screenshot_path}"
 
   for ((attempt = 1; attempt <= attempts; attempt += 1)); do
     python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${screenshot_path}" >/dev/null
@@ -182,11 +185,22 @@ dark_header_pixels = sum(
 raise SystemExit(0 if dark_header_pixels >= 100 else 1)
 PY
     then
-      return 0
+      # The preview window slides in from the right. Its header becomes
+      # readable a frame or two before that animation finishes, which made
+      # visual captures intermittently land four pixels apart. Only accept a
+      # static preview after two consecutive screendumps match exactly.
+      sleep 0.2
+      python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${stable_screenshot_path}" >/dev/null
+      if cmp -s "${screenshot_path}" "${stable_screenshot_path}"; then
+        mv "${stable_screenshot_path}" "${screenshot_path}"
+        return 0
+      fi
+      rm -f "${stable_screenshot_path}"
     fi
-    sleep 0.5
+    sleep 0.25
   done
 
+  rm -f "${stable_screenshot_path}"
   echo "Timed out waiting for the dictation preview on ${platform}." >&2
   return 1
 }
