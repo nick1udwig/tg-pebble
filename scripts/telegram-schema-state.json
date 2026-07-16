@@ -1,0 +1,7 @@
+{
+  "bundledLayer": 198,
+  "latestReviewedUpstreamLayer": 225,
+  "reviewedOn": "2026-07-15",
+  "upstreamConfigUrl": "https://core.telegram.org/api/config.json",
+  "upstreamSchemaUrl": "https://core.telegram.org/schema/json"
+}

@@ -29,6 +29,7 @@ run_step() {
 }
 
 run_step "JS tests" npm run test:js
+run_step "Telegram schema metadata" npm run check:tl-schema
 run_step "C tests" npm run test:c
 run_step "Config-page tests" npm run test:config
 run_step "Emulator matrix" env TG_PEBBLE_SESSION_GUARDED=1 bash scripts/test-emulator-matrix.sh

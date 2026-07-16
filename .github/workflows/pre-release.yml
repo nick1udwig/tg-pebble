@@ -64,6 +64,9 @@ jobs:
       - name: Run JS tests
         run: npm run test:js
 
+      - name: Check Telegram schema metadata
+        run: npm run check:tl-schema
+
       - name: Run C tests
         run: npm run test:c
 
