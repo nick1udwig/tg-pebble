@@ -32,6 +32,48 @@ pc_bios_dir="${toolchain_dir}/lib/pc-bios"
 pkjs_python="${TG_PEBBLE_TOOL_PYTHON:-$(head -n 1 "${pebble_bin}" | sed 's/^#!//')}"
 qemu_log="${session_file%.json}.qemu.log"
 pkjs_log="${session_file%.json}.pkjs.log"
+qemu_pid=""
+pkjs_pid=""
+startup_complete=0
+
+cleanup_failed_start() {
+  local exit_code="$?"
+  trap - EXIT
+
+  if [[ "${startup_complete}" != "1" ]]; then
+    if [[ -n "${pkjs_pid}" ]]; then
+      kill "${pkjs_pid}" >/dev/null 2>&1 || true
+      wait "${pkjs_pid}" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "${qemu_pid}" ]]; then
+      kill "${qemu_pid}" >/dev/null 2>&1 || true
+      wait "${qemu_pid}" >/dev/null 2>&1 || true
+    fi
+    rm -f "${session_file}"
+    echo "Failed to start the ${platform} emulator session." >&2
+    echo "QEMU log: ${qemu_log}" >&2
+    echo "PKJS log: ${pkjs_log}" >&2
+  fi
+
+  exit "${exit_code}"
+}
+
+trap cleanup_failed_start EXIT
+rm -f "${session_file}" "${qemu_log}" "${pkjs_log}"
+
+qemu_major="$("${qemu_bin}" --version | sed -nE 's/^QEMU emulator version ([0-9]+).*/\1/p' | head -n 1)"
+new_qemu=0
+if [[ "${qemu_major}" =~ ^[0-9]+$ ]] && ((qemu_major >= 7)); then
+  new_qemu=1
+fi
+
+use_new_boards=1
+if [[ "${sdk_version}" =~ ^[0-9]+([.][0-9]+)*$ ]]; then
+  oldest_version="$(printf '%s\n' "${sdk_version}" "4.9.148" | sort -V | head -n 1)"
+  if [[ "${oldest_version}" == "${sdk_version}" ]]; then
+    use_new_boards=0
+  fi
+fi
 
 choose_port() {
   python3 - <<'PY'
@@ -67,22 +109,40 @@ with bz2.BZ2File(src, "rb") as from_file, dst.open("wb") as to_file:
 PY
 }
 
-qemu_platform_args() {
+set_qemu_platform_args() {
+  local spi_pflash_args=()
+  local new_mtd_flash_args=(-drive "if=mtd,format=raw,file=${spi_flash}")
+  local new_board_audio_args=(-audio "driver=none,id=audio0")
+
+  if [[ "${new_qemu}" == "1" ]]; then
+    spi_pflash_args=(-drive "if=none,id=spi-flash,file=${spi_flash},format=raw")
+  else
+    spi_pflash_args=(-pflash "${spi_flash}")
+  fi
+
   case "${platform}" in
     aplite)
-      echo "-machine pebble-bb2 -cpu cortex-m3 -mtdblock ${spi_flash}"
+      platform_args=(-machine pebble-bb2 -cpu cortex-m3 -mtdblock "${spi_flash}")
       ;;
     basalt)
-      echo "-machine pebble-snowy-bb -cpu cortex-m4 -pflash ${spi_flash}"
+      platform_args=(-machine pebble-snowy-bb -cpu cortex-m4 "${spi_pflash_args[@]}")
       ;;
     diorite)
-      echo "-machine pebble-silk-bb -cpu cortex-m4 -mtdblock ${spi_flash}"
+      platform_args=(-machine pebble-silk-bb -cpu cortex-m4 -mtdblock "${spi_flash}")
       ;;
     emery)
-      echo "-machine pebble-snowy-emery-bb -cpu cortex-m4 -pflash ${spi_flash}"
+      if [[ "${use_new_boards}" == "1" ]]; then
+        platform_args=(-machine pebble-emery -cpu cortex-m33 "${new_mtd_flash_args[@]}" "${new_board_audio_args[@]}")
+      else
+        platform_args=(-machine pebble-snowy-emery-bb -cpu cortex-m4 "${spi_pflash_args[@]}")
+      fi
       ;;
     flint)
-      echo "-machine pebble-silk-bb -cpu cortex-m4 -mtdblock ${spi_flash}"
+      if [[ "${use_new_boards}" == "1" ]]; then
+        platform_args=(-machine pebble-flint -cpu cortex-m4 "${new_mtd_flash_args[@]}" "${new_board_audio_args[@]}")
+      else
+        platform_args=(-machine pebble-silk-bb -cpu cortex-m4 -mtdblock "${spi_flash}")
+      fi
       ;;
     *)
       echo "Unsupported platform for manual harness: ${platform}" >&2
@@ -169,16 +229,24 @@ if [[ -z "${DISPLAY:-}" ]]; then
   headless_prefix=(xvfb-run -a)
 fi
 
-read -r -a platform_args <<<"$(qemu_platform_args)"
+tcp_opts="server,nowait"
+firmware_args=(-pflash "${micro_flash}")
+if [[ "${new_qemu}" == "1" ]]; then
+  tcp_opts="server=on,wait=off"
+  firmware_args=(-kernel "${micro_flash}")
+fi
+
+platform_args=()
+set_qemu_platform_args
 
 "${headless_prefix[@]}" "${qemu_bin}" \
   -rtc base=localtime \
   -serial null \
-  -serial "tcp::${qemu_port},server,nowait" \
-  -serial "tcp::${qemu_serial_port},server,nowait" \
-  -pflash "${micro_flash}" \
-  -gdb "tcp::${qemu_gdb_port},server,nowait" \
-  -monitor "tcp::${qemu_monitor_port},server,nowait" \
+  -serial "tcp::${qemu_port},${tcp_opts}" \
+  -serial "tcp::${qemu_serial_port},${tcp_opts}" \
+  "${firmware_args[@]}" \
+  -gdb "tcp::${qemu_gdb_port},${tcp_opts}" \
+  -monitor "tcp::${qemu_monitor_port},${tcp_opts}" \
   -L "${pc_bios_dir}" \
   -display none \
   "${platform_args[@]}" \
@@ -189,16 +257,32 @@ wait_for_port "${qemu_port}" 80
 wait_for_port "${qemu_monitor_port}" 80
 wait_for_qemu_boot "${qemu_serial_port}"
 
-"${pkjs_python}" -m pypkjs \
-  --qemu "localhost:${qemu_port}" \
-  --port "${pkjs_port}" \
-  --persist "${persist_dir}" \
-  --layout "${layout_file}" \
-  --debug \
-  >"${pkjs_log}" 2>&1 &
-pkjs_pid=$!
+pkjs_ready=0
+for attempt in 1 2 3; do
+  printf 'PKJS startup attempt %s\n' "${attempt}" >>"${pkjs_log}"
+  "${pkjs_python}" -m pypkjs \
+    --qemu "localhost:${qemu_port}" \
+    --port "${pkjs_port}" \
+    --persist "${persist_dir}" \
+    --layout "${layout_file}" \
+    --debug \
+    >>"${pkjs_log}" 2>&1 &
+  pkjs_pid=$!
 
-wait_for_port "${pkjs_port}" 80
+  if wait_for_port "${pkjs_port}" 80; then
+    pkjs_ready=1
+    break
+  fi
+
+  kill "${pkjs_pid}" >/dev/null 2>&1 || true
+  wait "${pkjs_pid}" >/dev/null 2>&1 || true
+  pkjs_pid=""
+  sleep 1
+done
+
+if [[ "${pkjs_ready}" != "1" ]]; then
+  exit 1
+fi
 
 python3 - <<PY
 import json
@@ -239,3 +323,6 @@ PY
 if [[ "${skip_app_install}" != "1" && "${skip_app_install}" != "true" ]]; then
   pebble install "${pbw_path}" --qemu "localhost:${qemu_port}" >/dev/null
 fi
+
+startup_complete=1
+trap - EXIT
