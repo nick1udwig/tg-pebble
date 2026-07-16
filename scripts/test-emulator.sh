@@ -151,6 +151,46 @@ print(app_info["uuid"])
 PY
 )"
 
+wait_for_dictation_preview() {
+  local screenshot_path="$1"
+  local attempts="${2:-24}"
+
+  for ((attempt = 1; attempt <= attempts; attempt += 1)); do
+    python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${screenshot_path}" >/dev/null
+    if "${pebble_python}" - "${screenshot_path}" "${platform}" <<'PY'
+import sys
+from PIL import Image
+
+path, platform = sys.argv[1:]
+target_width, target_height = (200, 228) if platform == "emery" else (144, 168)
+image = Image.open(path).convert("RGB")
+width, height = image.size
+
+if width < target_width or height < target_height:
+    raise SystemExit(1)
+
+left = (width - target_width) // 2
+top = (height - target_height) // 2
+image = image.crop((left, top, left + target_width, top + target_height))
+pixels = image.load()
+dark_header_pixels = sum(
+    1
+    for y in range(min(30, target_height))
+    for x in range(min(80, target_width))
+    if max(pixels[x, y]) < 64
+)
+raise SystemExit(0 if dark_header_pixels >= 100 else 1)
+PY
+    then
+      return 0
+    fi
+    sleep 0.5
+  done
+
+  echo "Timed out waiting for the dictation preview on ${platform}." >&2
+  return 1
+}
+
 sleep 2
 if [[ "${scenario}" == "zero-state" ]]; then
   python3 scripts/seed-emulator-app-state.py "${persist_dir}" "${app_uuid}" "${state_name}" >/dev/null
@@ -172,8 +212,7 @@ if [[ "${scenario}" == "dictation-success" ]]; then
   sleep 2
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${dictation_listening_ppm}" >/dev/null
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" sendkey s >/dev/null
-  sleep 3
-  python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${dictation_preview_ppm}" >/dev/null
+  wait_for_dictation_preview "${dictation_preview_ppm}"
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" sendkey s >/dev/null
   sleep 2
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${dictation_sent_ppm}" >/dev/null
@@ -185,8 +224,7 @@ elif [[ "${scenario}" == "send-failure" ]]; then
   sleep 2
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${dictation_listening_ppm}" >/dev/null
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" sendkey s >/dev/null
-  sleep 3
-  python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${dictation_preview_ppm}" >/dev/null
+  wait_for_dictation_preview "${dictation_preview_ppm}"
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" sendkey s >/dev/null
   sleep 2
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${send_failed_ppm}" >/dev/null

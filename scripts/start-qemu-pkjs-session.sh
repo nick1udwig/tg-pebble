@@ -202,7 +202,7 @@ while time.time() < deadline:
     if not chunk:
         continue
     received += chunk
-    if b"<SDK Home>" in received or b"<Launcher>" in received or b"Ready for communication" in received:
+    if b"Ready for communication" in received:
         sock.close()
         raise SystemExit(0)
 
