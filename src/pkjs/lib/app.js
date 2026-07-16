@@ -100,6 +100,38 @@ function createPkjsApp(options) {
     return telegramAdapterFactory(session);
   }
 
+  function canRefreshChatList() {
+    var adapter = getTelegramAdapter();
+
+    return !!(adapter && adapter.isConfigured && adapter.isConfigured());
+  }
+
+  async function refreshChatList() {
+    var adapter = getTelegramAdapter();
+    var result;
+
+    ensureFixtureCache();
+
+    if (!adapter || !adapter.isConfigured || !adapter.isConfigured()) {
+      return buildCurrentChatListPayload();
+    }
+
+    try {
+      result = await adapter.hydrateChatList({
+        limit: 20,
+        cachedRefs: liveChatRefs
+      });
+      liveChatList = result.chats || [];
+      liveChatRefs = result.chatRefs || {};
+      cache.setChatList(liveChatList);
+      cache.setChatRefs(liveChatRefs);
+      return buildCurrentChatListPayload();
+    } catch (error) {
+      logger("hydrateChatList failed", error);
+      throw error;
+    }
+  }
+
   function getConfigState() {
     var settings = cache.getSettings();
     var session = cache.getSession() || {};
@@ -245,30 +277,32 @@ function createPkjsApp(options) {
       syncState = reduceSyncState(syncState, { type: eventType });
       return syncState;
     },
+    canRefreshChatList: function() {
+      return canRefreshChatList();
+    },
+    getChatListSnapshot: function() {
+      ensureFixtureCache();
+      return buildCurrentChatListPayload();
+    },
+    refreshChatList: function() {
+      return refreshChatList();
+    },
     bootstrap: async function() {
-      var adapter = getTelegramAdapter();
-      var result;
+      var payload;
 
       ensureFixtureCache();
 
-      if (!adapter || !adapter.isConfigured || !adapter.isConfigured()) {
+      if (!canRefreshChatList()) {
         return buildCurrentChatListPayload();
       }
 
       try {
-        result = await adapter.hydrateChatList({
-          limit: 20,
-          cachedRefs: liveChatRefs
-        });
-        liveChatList = result.chats || [];
-        liveChatRefs = result.chatRefs || {};
-        cache.setChatList(liveChatList);
-        cache.setChatRefs(liveChatRefs);
+        return await refreshChatList();
       } catch (error) {
-        logger("hydrateChatList failed", error);
+        payload = buildCurrentChatListPayload();
+        payload.errorMessage = getErrorMessage(error, "Chat list refresh failed.");
+        return payload;
       }
-
-      return buildCurrentChatListPayload();
     },
     getChatPage: async function(chatId) {
       var adapter = getTelegramAdapter();

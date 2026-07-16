@@ -1074,8 +1074,7 @@ function sendMessageItems(messages, index, requestId, onComplete, onError) {
   );
 }
 
-async function sendChatListOnce() {
-  var payload = await app.bootstrap();
+function sendChatListPayload(payload, completionSyncState) {
   var chats = payload.chats || [];
   var settingsState = buildSettingsStatePayload();
 
@@ -1088,7 +1087,6 @@ async function sendChatListOnce() {
       }
       settled = true;
       log(message, error);
-      app.refreshFailed();
       reject(error || new Error(message));
     }
 
@@ -1102,13 +1100,12 @@ async function sendChatListOnce() {
               MessageType.chatListComplete,
               String(chats.length),
               chats.length,
-              SyncState.synced,
+              completionSyncState,
               function() {
                 if (settled) {
                   return;
                 }
                 settled = true;
-                app.refreshSucceeded();
                 resolve(payload);
               },
               function(error) {
@@ -1127,6 +1124,32 @@ async function sendChatListOnce() {
       fail("sync status send failed", error);
     });
   });
+}
+
+async function sendChatListOnce() {
+  var canRefresh;
+  var cachedPayload;
+  var refreshedPayload;
+
+  try {
+    canRefresh = app.canRefreshChatList();
+    cachedPayload = app.getChatListSnapshot();
+    await sendChatListPayload(cachedPayload, canRefresh ? SyncState.syncing : SyncState.synced);
+
+    if (!canRefresh) {
+      app.refreshSucceeded();
+      return cachedPayload;
+    }
+
+    refreshedPayload = await app.refreshChatList();
+    await sendChatListPayload(refreshedPayload, SyncState.synced);
+    app.refreshSucceeded();
+    return refreshedPayload;
+  } catch (error) {
+    app.refreshFailed();
+    sendEnvelope(MessageType.syncStatus, "", 0, SyncState.desynced);
+    throw error;
+  }
 }
 
 function sendChatList() {
@@ -1159,7 +1182,6 @@ function scheduleChatListSend() {
     chatListScheduleTimer = null;
     sendChatList().catch(function(error) {
       log("sendChatList failed", error);
-      app.refreshFailed();
     });
   }, 120);
 }

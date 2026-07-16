@@ -65,6 +65,14 @@ async function loadPkjsHarness(options = {}) {
     authSessionString: "temp-auth-session",
   };
   const requestCodeError = options.requestCodeError || null;
+  const hydrateChatList = options.hydrateChatList || (async () => ({
+    chats: [
+      { id: 7, remoteId: "user:42", title: "Live Alice", preview: "Latest", unreadCount: 1 },
+    ],
+    chatRefs: {
+      7: { peerKey: "user:42", peerType: "user", peerId: "42", accessHash: "123" },
+    },
+  }));
   const sentMessages = [];
   const listeners = new Map();
   const storage = createMemoryStorage();
@@ -108,19 +116,18 @@ async function loadPkjsHarness(options = {}) {
 
     return requestCodeResult;
   });
+  if (options.initialStorage) {
+    for (const [key, value] of Object.entries(options.initialStorage)) {
+      storage.setItem(key, value);
+    }
+  }
+
   const createTelegramAdapter = vi.fn(() => ({
     isConfigured() {
       return true;
     },
     async hydrateChatList() {
-      return {
-        chats: [
-          { id: 7, remoteId: "user:42", title: "Live Alice", preview: "Latest", unreadCount: 1 },
-        ],
-        chatRefs: {
-          7: { peerKey: "user:42", peerType: "user", peerId: "42", accessHash: "123" },
-        },
-      };
+      return hydrateChatList();
     },
     async hydrateChatPage() {
       return {
@@ -203,6 +210,7 @@ async function loadPkjsHarness(options = {}) {
     completeTelegramPasswordAuth,
     requestTelegramLoginCode,
     createTelegramAdapter,
+    hydrateChatList,
     restore() {
       delete require.cache[indexModulePath];
       authModule.authorizeTelegramSession = originalAuthorizeTelegramSession;
@@ -372,11 +380,13 @@ describe("PKJS config auth flow", () => {
   it("coalesces repeated startup chat-list requests", async () => {
     vi.useFakeTimers();
     const harness = await loadPkjsHarness();
-    let resolveBootstrap;
-    const bootstrap = vi.fn(() => new Promise((resolve) => {
-      resolveBootstrap = resolve;
+    let resolveRefresh;
+    const refreshChatList = vi.fn(() => new Promise((resolve) => {
+      resolveRefresh = resolve;
     }));
-    harness.module.app.bootstrap = bootstrap;
+    harness.module.app.canRefreshChatList = () => true;
+    harness.module.app.getChatListSnapshot = () => ({ chats: [] });
+    harness.module.app.refreshChatList = refreshChatList;
 
     try {
       await harness.module.handleRequest({ 0: "app_ready" });
@@ -384,16 +394,106 @@ describe("PKJS config auth flow", () => {
       await harness.module.handleRequest({ 0: "app_ready" });
       await vi.advanceTimersByTimeAsync(120);
 
-      expect(bootstrap).toHaveBeenCalledTimes(1);
+      expect(refreshChatList).toHaveBeenCalledTimes(1);
 
-      resolveBootstrap({ chats: [] });
+      resolveRefresh({ chats: [] });
       await vi.runAllTimersAsync();
 
-      expect(getSentPayloads(harness.sentMessages, "sync_status")).toHaveLength(1);
-      expect(getSentPayloads(harness.sentMessages, "settings_state")).toHaveLength(1);
+      expect(getSentPayloads(harness.sentMessages, "sync_status")).toHaveLength(2);
+      expect(getSentPayloads(harness.sentMessages, "settings_state")).toHaveLength(2);
       expect(getSentPayloads(harness.sentMessages, "chat_list_complete")).toEqual([
+        { payload: "0", requestId: 0, syncState: "syncing" },
         { payload: "0", requestId: 0, syncState: "synced" },
       ]);
+    } finally {
+      harness.restore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("sends the warm cache before the Telegram refresh completes", async () => {
+    vi.useFakeTimers();
+    let resolveRefresh;
+    const hydrateChatList = vi.fn(() => new Promise((resolve) => {
+      resolveRefresh = resolve;
+    }));
+    const harness = await loadPkjsHarness({
+      hydrateChatList,
+      initialStorage: {
+        "tg_pebble:session": JSON.stringify({ sessionString: "live-session" }),
+        "tg_pebble:chat_list": JSON.stringify([
+          { id: 9, remoteId: "user:9", title: "Cached Alice", preview: "Cached", unreadCount: 2 },
+        ]),
+        "tg_pebble:chat_refs": JSON.stringify({
+          9: { peerKey: "user:9", peerType: "user", peerId: "9", accessHash: "90" },
+        }),
+      },
+    });
+
+    try {
+      await harness.module.handleRequest({ 0: "app_ready" });
+      await vi.advanceTimersByTimeAsync(120);
+
+      expect(hydrateChatList).toHaveBeenCalledTimes(1);
+      expect(getSentPayloads(harness.sentMessages, "chat_item")).toEqual([
+        { payload: "9|Cached Alice|Cached|2", requestId: 0, syncState: "syncing" },
+      ]);
+      expect(getSentPayloads(harness.sentMessages, "chat_list_complete")).toEqual([
+        { payload: "1", requestId: 1, syncState: "syncing" },
+      ]);
+
+      resolveRefresh({
+        chats: [{ id: 7, title: "Live Alice", preview: "Latest", unreadCount: 1 }],
+        chatRefs: { 7: { peerKey: "user:7", peerType: "user", peerId: "7", accessHash: "70" } },
+      });
+      await vi.runAllTimersAsync();
+
+      expect(getSentPayloads(harness.sentMessages, "chat_item").at(-1)).toEqual({
+        payload: "7|Live Alice|Latest|1",
+        requestId: 0,
+        syncState: "syncing",
+      });
+      expect(getSentPayloads(harness.sentMessages, "chat_list_complete").at(-1)).toEqual({
+        payload: "1",
+        requestId: 1,
+        syncState: "synced",
+      });
+    } finally {
+      harness.restore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps cached chats visible and reports desync when refresh fails", async () => {
+    vi.useFakeTimers();
+    const harness = await loadPkjsHarness({
+      hydrateChatList: async () => {
+        throw new Error("NETWORK_UNAVAILABLE");
+      },
+      initialStorage: {
+        "tg_pebble:session": JSON.stringify({ sessionString: "live-session" }),
+        "tg_pebble:chat_list": JSON.stringify([
+          { id: 9, title: "Cached Alice", preview: "Cached", unreadCount: 2 },
+        ]),
+      },
+    });
+
+    try {
+      await harness.module.handleRequest({ 0: "app_ready" });
+      await vi.runAllTimersAsync();
+
+      expect(getSentPayloads(harness.sentMessages, "chat_item")).toEqual([
+        { payload: "9|Cached Alice|Cached|2", requestId: 0, syncState: "syncing" },
+      ]);
+      expect(getSentPayloads(harness.sentMessages, "chat_list_complete")).toEqual([
+        { payload: "1", requestId: 1, syncState: "syncing" },
+      ]);
+      expect(getSentPayloads(harness.sentMessages, "sync_status").at(-1)).toEqual({
+        payload: "",
+        requestId: 0,
+        syncState: "desynced",
+      });
+      expect(harness.module.app.getSyncState()).toBe("desynced");
     } finally {
       harness.restore();
       vi.useRealTimers();

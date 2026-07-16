@@ -377,6 +377,40 @@ describe("createPkjsApp", () => {
     expect(app.cache.getMessagePages()[1][0].text).toBe("Message 17");
   });
 
+  it("preserves the warm chat snapshot when a live refresh fails", async () => {
+    const storage = createMemoryStorage();
+    storage.setItem("tg_pebble:session", JSON.stringify({ sessionString: "live-session" }));
+    storage.setItem("tg_pebble:chat_list", JSON.stringify([
+      { id: 9, title: "Cached Alice", preview: "Cached", unreadCount: 2 },
+    ]));
+    const app = createPkjsApp({
+      storage,
+      fixtureMode: false,
+      telegramAdapterFactory() {
+        return {
+          isConfigured() {
+            return true;
+          },
+          async hydrateChatList() {
+            throw new Error("NETWORK_UNAVAILABLE");
+          },
+        };
+      },
+    });
+
+    expect(app.getChatListSnapshot().chats).toEqual([
+      { id: 9, title: "Cached Alice", preview: "Cached", unreadCount: 2 },
+    ]);
+    await expect(app.refreshChatList()).rejects.toThrow("NETWORK_UNAVAILABLE");
+    expect(app.getChatListSnapshot().chats).toEqual([
+      { id: 9, title: "Cached Alice", preview: "Cached", unreadCount: 2 },
+    ]);
+    await expect(app.bootstrap()).resolves.toMatchObject({
+      chats: [{ id: 9, title: "Cached Alice", preview: "Cached", unreadCount: 2 }],
+      errorMessage: "NETWORK_UNAVAILABLE",
+    });
+  });
+
   it("reports Telegram chat page hydrate errors", async () => {
     const logMessages = [];
     const app = createPkjsApp({
