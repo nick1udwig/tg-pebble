@@ -356,6 +356,35 @@ describe("PKJS config auth flow", () => {
     }
   });
 
+  it("coalesces duplicate login-code events from a single config close", async () => {
+    const harness = await loadPkjsHarness();
+
+    try {
+      const response = encodeConfigResponse("auth:request-code", {
+        phoneNumber: "+15551234567",
+        loginCode: "",
+        password: "",
+        sendMode: "preview",
+        previewChatMessage: false,
+      });
+      const handleWebviewClosed = harness.listeners.get("webviewclosed");
+
+      handleWebviewClosed({ response });
+      handleWebviewClosed({ response });
+      handleWebviewClosed({ response });
+      await flushAsyncWork();
+
+      expect(harness.requestTelegramLoginCode).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(harness.storage.getItem("tg_pebble:auth_state"))).toMatchObject({
+        phoneNumber: "+15551234567",
+        phoneCodeHash: "hash-123",
+        codeDelivery: "app",
+      });
+    } finally {
+      harness.restore();
+    }
+  });
+
   it("drops stale chat page work and correlates the latest response", async () => {
     vi.useFakeTimers();
     const harness = await loadPkjsHarness();

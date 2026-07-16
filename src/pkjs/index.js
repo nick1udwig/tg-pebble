@@ -307,6 +307,7 @@ var app = createPkjsApp({
 var latestChatPageRequestId = 0;
 var chatListSendPromise = null;
 var chatListScheduleTimer = null;
+var loginCodeRequestPromise = null;
 
 function log(message, extra) {
   var detail = formatLogExtra(extra);
@@ -845,7 +846,7 @@ async function handleSubmitPasswordProof(state) {
   }
 }
 
-async function handleRequestLoginCode(state) {
+async function requestLoginCodeOnce(state) {
   var nextState = state || {};
   var codeRequest;
   var resolvedRuntimeConfig;
@@ -892,6 +893,20 @@ async function handleRequestLoginCode(state) {
     app.refreshFailed();
     sendSettingsState(SyncState.desynced);
     sendEnvelope(MessageType.syncStatus, "", 0, SyncState.desynced);
+  }
+}
+
+async function handleRequestLoginCode(state) {
+  if (loginCodeRequestPromise) {
+    log("Telegram login code request coalesced", { inFlight: true });
+    return loginCodeRequestPromise;
+  }
+
+  loginCodeRequestPromise = requestLoginCodeOnce(state);
+  try {
+    return await loginCodeRequestPromise;
+  } finally {
+    loginCodeRequestPromise = null;
   }
 }
 
