@@ -60,7 +60,12 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Install Pebble SDK
-        run: pebble sdk install latest
+        run: |
+          pebble sdk install latest
+          sdk_include_path="$(pebble sdk include-path basalt)"
+          sdk_root="$(realpath "${sdk_include_path}/../../../..")"
+          test -x "${sdk_root}/toolchain/bin/qemu-pebble"
+          echo "TG_PEBBLE_SDK_ROOT=${sdk_root}" >> "$GITHUB_ENV"
 
       - name: Run JS tests
         run: npm run test:js
