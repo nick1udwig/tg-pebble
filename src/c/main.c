@@ -1225,6 +1225,11 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
   }
 
   if (strcmp(type, TG_MSG_CHAT_PAGE_COMPLETE) == 0) {
+    size_t parsed_count = 0;
+
+    if (prv_parse_count_string(payload, TG_MAX_MESSAGES, &parsed_count)) {
+      s_message_count = parsed_count;
+    }
     s_chat_page_loaded = true;
     s_chat_page_error[0] = '\0';
     if (s_chat_menu_layer) {

@@ -366,7 +366,7 @@ describe("PKJS config auth flow", () => {
       await vi.runAllTimersAsync();
 
       expect(getSentPayloads(harness.sentMessages, "chat_page_complete")).toEqual([
-        { payload: "2001", requestId: 42, syncState: "synced" },
+        { payload: "0", requestId: 42, syncState: "synced" },
       ]);
       expect(getSentPayloads(harness.sentMessages, "sync_status")).toEqual([
         { payload: "", requestId: 42, syncState: "syncing" },

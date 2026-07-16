@@ -1219,7 +1219,7 @@ async function sendChatPage(chatId, requestId) {
           return;
         }
         app.refreshSucceeded();
-        sendEnvelope(MessageType.chatPageComplete, String(payload.chatId), requestId, SyncState.synced);
+        sendEnvelope(MessageType.chatPageComplete, String(messages.length), requestId, SyncState.synced);
       },
       function(error) {
         if (requestId !== latestChatPageRequestId) {
