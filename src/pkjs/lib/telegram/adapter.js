@@ -373,6 +373,29 @@ function createTelegramAdapter(options) {
     return connectPromise;
   }
 
+  function resetClientAfterFailure(error) {
+    var failedClient = client;
+
+    clearIdleTimer();
+    client = null;
+    connectPromise = null;
+    logger("Telegram connection reset after failure", {
+      message: String(error && error.message || error || "Unknown error")
+    });
+
+    if (!failedClient || typeof failedClient.disconnect !== "function") {
+      return Promise.reject(error);
+    }
+
+    return Promise.resolve().then(function() {
+      return failedClient.disconnect();
+    }).catch(function() {
+      // Preserve the operation error that caused the reset.
+    }).then(function() {
+      throw error;
+    });
+  }
+
   function withClient(handler) {
     var pending;
 
@@ -383,18 +406,14 @@ function createTelegramAdapter(options) {
     clearIdleTimer();
     pending = operationQueue.then(function() {
       return getConnectedClient();
-    }).then(handler);
+    }).then(handler).catch(resetClientAfterFailure);
     latestOperation = pending;
     operationQueue = pending.catch(function() {});
     pending.then(function() {
       if (latestOperation === pending) {
         scheduleIdleDisconnect();
       }
-    }, function() {
-      if (latestOperation === pending) {
-        scheduleIdleDisconnect();
-      }
-    });
+    }, function() {});
     return pending;
   }
 

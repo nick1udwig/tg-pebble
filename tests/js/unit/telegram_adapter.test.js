@@ -217,4 +217,44 @@ describe("telegram adapter mapping", () => {
     expect(client.sendMessage).toHaveBeenCalledTimes(1);
     await adapter.disconnect();
   });
+
+  it("discards a failed shared client before the next retry", async () => {
+    const firstClient = {
+      connect: vi.fn(async () => {}),
+      disconnect: vi.fn(async () => {}),
+      getDialogs: vi.fn(async () => {
+        throw new Error("WebSocket is closed.");
+      }),
+    };
+    const secondClient = {
+      connect: vi.fn(async () => {}),
+      disconnect: vi.fn(async () => {}),
+      getDialogs: vi.fn(async () => []),
+    };
+    const clientFactory = vi.fn()
+      .mockReturnValueOnce(firstClient)
+      .mockReturnValueOnce(secondClient);
+    const adapter = createTelegramAdapter({
+      enabled: true,
+      sessionString: "saved-session",
+      clientFactory,
+      idleDisconnectMs: 0,
+    });
+
+    await expect(adapter.hydrateChatList({ limit: 5, cachedRefs: {} }))
+      .rejects.toThrow("WebSocket is closed.");
+    expect(firstClient.disconnect).toHaveBeenCalledTimes(1);
+
+    await expect(adapter.hydrateChatList({ limit: 5, cachedRefs: {} })).resolves.toEqual({
+      chats: [],
+      chatRefs: {},
+    });
+    expect(clientFactory).toHaveBeenCalledTimes(2);
+    expect(firstClient.connect).toHaveBeenCalledTimes(1);
+    expect(secondClient.connect).toHaveBeenCalledTimes(1);
+    expect(secondClient.getDialogs).toHaveBeenCalledTimes(1);
+
+    await adapter.disconnect();
+    expect(secondClient.disconnect).toHaveBeenCalledTimes(1);
+  });
 });
