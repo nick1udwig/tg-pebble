@@ -204,6 +204,23 @@ describe("tgproto TL codec", () => {
 });
 
 describe("native Telegram client facade", () => {
+  it("uses cryptographically generated message random ids", async () => {
+    const sender = {
+      invoke: vi.fn(async ({ request }) => {
+        expect(request.randomId).toBe("578437695752307201");
+        return { id: 7, message: "Sent" };
+      }),
+    };
+    const client = new NativeTelegramClient({
+      sender,
+      randomBytes: vi.fn(() => new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])),
+    });
+
+    await client.sendMessage(Api.InputPeerSelf({}), { message: "Sent" });
+
+    expect(client.randomBytes).toHaveBeenCalledWith(8);
+  });
+
   it("requests a login code through the native sender", async () => {
     const sender = {
       connect: vi.fn(async () => {}),

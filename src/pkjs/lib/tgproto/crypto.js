@@ -1,6 +1,7 @@
 "use strict";
 
 var bytes = require("./bytes");
+var secureRandom = require("./secure_random");
 
 function toBytes(value) {
   return value instanceof Uint8Array ? value : new Uint8Array(value || []);
@@ -789,19 +790,7 @@ function aesIgeDecrypt(data, key, iv) {
   return aesIgeCrypt(data, key, iv, true);
 }
 
-function defaultRandomBytes(length) {
-  var out = new Uint8Array(length);
-  var index;
-
-  if (typeof crypto !== "undefined" && crypto && typeof crypto.getRandomValues === "function") {
-    return crypto.getRandomValues(out);
-  }
-
-  for (index = 0; index < out.length; index += 1) {
-    out[index] = Math.floor(Math.random() * 256);
-  }
-  return out;
-}
+var defaultRandomBytes = secureRandom.defaultRandomBytes;
 
 function createAesCtr(key, iv) {
   return new AesCtr(key, iv);

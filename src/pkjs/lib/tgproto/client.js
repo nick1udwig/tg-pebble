@@ -4,6 +4,8 @@ var tl = require("./tl");
 var webSocket = require("./web_socket");
 var sessionLib = require("./session");
 var tlSchema = require("./tl_schema");
+var bytes = require("./bytes");
+var secureRandom = require("./secure_random");
 var numberLib = require("../number");
 var objectLib = require("../object");
 
@@ -82,6 +84,8 @@ function NativeTelegramClient(options) {
   this.session = new sessionLib.NativeTelegramSession(this.options.sessionString || "");
   this.session.setDC(this.dc.dcId, this.dc.host, this.dc.port);
   this.sender = this.options.sender || null;
+  this.randomBytes = this.options.randomBytes ||
+    (this.sender && this.sender.randomBytes) || secureRandom.defaultRandomBytes;
   this.connected = false;
   this.didInitConnection = false;
 }
@@ -507,12 +511,19 @@ NativeTelegramClient.prototype.markRead = function(inputPeer, maxId) {
 };
 
 NativeTelegramClient.prototype.sendMessage = function(inputPeer, params) {
+  var randomId;
+
   params = params || {};
+  randomId = params.randomId;
+  if (randomId == null) {
+    randomId = bytes.bytesLEToInt64(this.randomBytes(8), false);
+  }
+
   return this.invoke(tl.Api.messages.SendMessage({
     noWebpage: true,
     peer: inputPeer,
     message: String(params.message || ""),
-    randomId: params.randomId || String(Date.now()) + String(Math.floor(Math.random() * 1000000))
+    randomId: String(randomId)
   })).then(normalizeSentMessage);
 };
 

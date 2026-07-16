@@ -2,21 +2,9 @@
 
 var bytes = require("./bytes");
 var bigints = require("./bigint");
+var secureRandom = require("./secure_random");
 
-function defaultRandomBytes(length) {
-  var out = new Uint8Array(length);
-  var index;
-
-  if (typeof crypto !== "undefined" && crypto && typeof crypto.getRandomValues === "function") {
-    return crypto.getRandomValues(out);
-  }
-
-  for (index = 0; index < out.length; index += 1) {
-    out[index] = Math.floor(Math.random() * 256);
-  }
-
-  return out;
-}
+var defaultRandomBytes = secureRandom.defaultRandomBytes;
 
 function createMessageId(nowMs, timeOffset) {
   var millis = Number(nowMs == null ? Date.now() : nowMs);

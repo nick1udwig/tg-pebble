@@ -2,6 +2,7 @@
 
 var bytes = require("./bytes");
 var abridged = require("./abridged");
+var secureRandom = require("./secure_random");
 
 var BAD_HEADER_PREFIXES = [
   "50567247",
@@ -10,20 +11,7 @@ var BAD_HEADER_PREFIXES = [
   "eeeeeeee"
 ];
 
-function defaultRandomBytes(length) {
-  var out = new Uint8Array(length);
-  var index;
-
-  if (typeof crypto !== "undefined" && crypto && typeof crypto.getRandomValues === "function") {
-    return crypto.getRandomValues(out);
-  }
-
-  for (index = 0; index < out.length; index += 1) {
-    out[index] = Math.floor(Math.random() * 256);
-  }
-
-  return out;
-}
+var defaultRandomBytes = secureRandom.defaultRandomBytes;
 
 function isBadHeaderRandom(random) {
   var prefix = bytes.bytesToHex(random.slice(0, 4));
