@@ -307,7 +307,7 @@ var app = createPkjsApp({
 var latestChatPageRequestId = 0;
 var chatListSendPromise = null;
 var chatListScheduleTimer = null;
-var loginCodeRequestPromise = null;
+var configActionPromise = null;
 
 function log(message, extra) {
   var detail = formatLogExtra(extra);
@@ -865,7 +865,7 @@ async function handleSubmitPasswordProof(state) {
   }
 }
 
-async function requestLoginCodeOnce(state) {
+async function handleRequestLoginCode(state) {
   var nextState = state || {};
   var codeRequest;
   var resolvedRuntimeConfig;
@@ -915,20 +915,6 @@ async function requestLoginCodeOnce(state) {
   }
 }
 
-async function handleRequestLoginCode(state) {
-  if (loginCodeRequestPromise) {
-    log("Telegram login code request coalesced", { inFlight: true });
-    return loginCodeRequestPromise;
-  }
-
-  loginCodeRequestPromise = requestLoginCodeOnce(state);
-  try {
-    return await loginCodeRequestPromise;
-  } finally {
-    loginCodeRequestPromise = null;
-  }
-}
-
 async function handleLogoutAction() {
   var currentSession = app.getSession();
 
@@ -959,7 +945,7 @@ async function handleLogoutAction() {
   );
 }
 
-async function handleConfigAction(actionPayload) {
+async function handleConfigActionOnce(actionPayload) {
   var action = actionPayload && actionPayload.action ? String(actionPayload.action) : "";
   var state = actionPayload && actionPayload.state ? actionPayload.state : {};
 
@@ -987,6 +973,22 @@ async function handleConfigAction(actionPayload) {
       break;
     default:
       break;
+  }
+}
+
+async function handleConfigAction(actionPayload) {
+  var action = actionPayload && actionPayload.action ? String(actionPayload.action) : "";
+
+  if (configActionPromise) {
+    log("Telegram config action coalesced", { action: action, inFlight: true });
+    return configActionPromise;
+  }
+
+  configActionPromise = handleConfigActionOnce(actionPayload);
+  try {
+    return await configActionPromise;
+  } finally {
+    configActionPromise = null;
   }
 }
 

@@ -300,8 +300,11 @@ describe("PKJS config auth flow", () => {
       });
 
       harness.listeners.get("webviewclosed")({ response });
+      harness.listeners.get("webviewclosed")({ response });
+      harness.listeners.get("webviewclosed")({ response });
       await flushAsyncWork();
 
+      expect(harness.authorizeTelegramSession).toHaveBeenCalledTimes(1);
       expect(harness.authorizeTelegramSession).toHaveBeenCalledWith(
         expect.objectContaining({
           apiId: 123456,
@@ -726,8 +729,11 @@ describe("PKJS config auth flow", () => {
       });
 
       harness.listeners.get("webviewclosed")({ response });
+      harness.listeners.get("webviewclosed")({ response });
+      harness.listeners.get("webviewclosed")({ response });
       await flushAsyncWork();
 
+      expect(harness.completeTelegramPasswordAuth).toHaveBeenCalledTimes(1);
       expect(harness.completeTelegramPasswordAuth).toHaveBeenCalledWith(
         expect.objectContaining({
           telegramWebDcId: 1,
