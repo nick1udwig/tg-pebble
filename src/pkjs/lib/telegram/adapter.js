@@ -284,37 +284,126 @@ function mapMessages(messages) {
   return addSenderRunMetadata(mapped);
 }
 
+function getMaxMessageId(messages) {
+  var maxId = 0;
+  var index;
+  var messageId;
+
+  messages = messages || [];
+  for (index = 0; index < messages.length; index += 1) {
+    messageId = Number(messages[index] && messages[index].id || 0);
+    if (isFiniteNumber(messageId) && messageId > maxId) {
+      maxId = messageId;
+    }
+  }
+
+  return maxId;
+}
+
 function createTelegramAdapter(options) {
   options = options || {};
   var clientFactory = options.clientFactory;
   var sessionString = String(options.sessionString || "");
   var enabled = parseBoolean(options.enabled, true);
   var logger = typeof options.logger === "function" ? options.logger : function() {};
+  var idleDisconnectMs = Number(options.idleDisconnectMs == null ? 30000 : options.idleDisconnectMs);
+  var client = null;
+  var connectPromise = null;
+  var operationQueue = Promise.resolve();
+  var latestOperation = null;
+  var idleTimer = null;
 
-  async function withClient(handler) {
-    var client;
+  function clearIdleTimer() {
+    if (idleTimer !== null && typeof clearTimeout === "function") {
+      clearTimeout(idleTimer);
+    }
+    idleTimer = null;
+  }
+
+  function disconnect() {
+    var pending;
+
+    clearIdleTimer();
+    latestOperation = null;
+    pending = operationQueue.then(async function() {
+      var currentClient = client;
+
+      client = null;
+      connectPromise = null;
+      if (currentClient && typeof currentClient.disconnect === "function") {
+        await currentClient.disconnect();
+      }
+    });
+    operationQueue = pending.catch(function() {});
+    return pending;
+  }
+
+  function scheduleIdleDisconnect() {
+    clearIdleTimer();
+    if (!isFiniteNumber(idleDisconnectMs) || idleDisconnectMs <= 0 || typeof setTimeout !== "function") {
+      return;
+    }
+
+    idleTimer = setTimeout(function() {
+      idleTimer = null;
+      disconnect().catch(function() {});
+    }, idleDisconnectMs);
+    if (idleTimer && typeof idleTimer.unref === "function") {
+      idleTimer.unref();
+    }
+  }
+
+  function getConnectedClient() {
+    if (!client) {
+      client = clientFactory(sessionString);
+    }
+
+    if (!connectPromise) {
+      connectPromise = Promise.resolve().then(async function() {
+        if (client && typeof client.connect === "function") {
+          await client.connect();
+        }
+        return client;
+      }).catch(function(error) {
+        connectPromise = null;
+        throw error;
+      });
+    }
+
+    return connectPromise;
+  }
+
+  function withClient(handler) {
+    var pending;
 
     if (!enabled || !sessionString || typeof clientFactory !== "function") {
-      throw new Error("Telegram adapter is not configured.");
+      return Promise.reject(new Error("Telegram adapter is not configured."));
     }
 
-    client = clientFactory(sessionString);
-
-    try {
-      if (client && typeof client.connect === "function") {
-        await client.connect();
+    clearIdleTimer();
+    pending = operationQueue.then(function() {
+      return getConnectedClient();
+    }).then(handler);
+    latestOperation = pending;
+    operationQueue = pending.catch(function() {});
+    pending.then(function() {
+      if (latestOperation === pending) {
+        scheduleIdleDisconnect();
       }
-      return await handler(client);
-    } finally {
-      if (client && typeof client.disconnect === "function") {
-        await client.disconnect().catch(function() {});
+    }, function() {
+      if (latestOperation === pending) {
+        scheduleIdleDisconnect();
       }
-    }
+    });
+    return pending;
   }
 
   return {
     isConfigured: function() {
       return enabled && sessionString.length > 0 && typeof clientFactory === "function";
+    },
+    disconnect: function() {
+      return disconnect();
     },
     hydrateChatList: async function(params) {
       params = params || {};
@@ -331,6 +420,7 @@ function createTelegramAdapter(options) {
         var inputPeer = buildInputPeer(params.remoteRef);
         var refSummary = describeRemoteRef(params.remoteRef, inputPeer);
         var messages;
+        var maxMessageId;
 
         refSummary.chatId = String(params.chatId || "");
         logger("Telegram chat page hydrate started", refSummary);
@@ -339,6 +429,17 @@ function createTelegramAdapter(options) {
         }
 
         messages = await client.getMessages(inputPeer, { limit: params.limit || 20 });
+        maxMessageId = getMaxMessageId(messages);
+        if (maxMessageId > 0 && typeof client.markRead === "function") {
+          try {
+            await client.markRead(inputPeer, maxMessageId);
+          } catch (error) {
+            logger("Telegram chat mark-read failed", {
+              chatId: String(params.chatId || ""),
+              message: String(error && error.message || error || "Unknown error")
+            });
+          }
+        }
         logger("Telegram chat page hydrate succeeded", {
           chatId: String(params.chatId || ""),
           peerType: refSummary.peerType,
@@ -370,5 +471,6 @@ module.exports = {
   createEmptyResult: createEmptyResult,
   mapDialogs: mapDialogs,
   mapMessages: mapMessages,
+  getMaxMessageId: getMaxMessageId,
   buildInputPeer: buildInputPeer
 };

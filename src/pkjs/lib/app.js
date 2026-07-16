@@ -37,6 +37,8 @@ function createPkjsApp(options) {
   var liveChatList;
   var liveMessagePages;
   var liveChatRefs;
+  var telegramAdapter = null;
+  var telegramAdapterSessionString = "";
 
   if (incomingSessionString && existingSessionString !== incomingSessionString) {
     cache.clearAuthState();
@@ -92,12 +94,28 @@ function createPkjsApp(options) {
 
   function getTelegramAdapter() {
     var session = cache.getSession();
+    var sessionString = session && session.sessionString ? String(session.sessionString) : "";
 
-    if (!telegramAdapterFactory || !session || !session.sessionString) {
+    if (!telegramAdapterFactory || !sessionString) {
       return null;
     }
 
-    return telegramAdapterFactory(session);
+    if (!telegramAdapter || telegramAdapterSessionString !== sessionString) {
+      telegramAdapter = telegramAdapterFactory(session);
+      telegramAdapterSessionString = sessionString;
+    }
+
+    return telegramAdapter;
+  }
+
+  function releaseTelegramAdapter() {
+    var previousAdapter = telegramAdapter;
+
+    telegramAdapter = null;
+    telegramAdapterSessionString = "";
+    if (previousAdapter && typeof previousAdapter.disconnect === "function") {
+      Promise.resolve(previousAdapter.disconnect()).catch(function() {});
+    }
   }
 
   function canRefreshChatList() {
@@ -250,6 +268,26 @@ function createPkjsApp(options) {
     cache.setChatList(nextChats);
   }
 
+  function markChatRead(chatId) {
+    var nextChats = [];
+    var changed = false;
+    var index;
+
+    for (index = 0; index < liveChatList.length; index += 1) {
+      if (String(liveChatList[index].id) === String(chatId) && Number(liveChatList[index].unreadCount || 0) !== 0) {
+        nextChats.push(assign({}, liveChatList[index], { unreadCount: 0 }));
+        changed = true;
+      } else {
+        nextChats.push(liveChatList[index]);
+      }
+    }
+
+    if (changed) {
+      liveChatList = nextChats;
+      cache.setChatList(liveChatList);
+    }
+  }
+
   function appendOutgoingMessageToCache(chatId, text) {
     var existingMessages = liveMessagePages[chatId] || [];
     var nextMessages = existingMessages.slice();
@@ -322,6 +360,7 @@ function createPkjsApp(options) {
             limit: 20
           });
           updateMessagePage(chatId, mergeOptimisticTail(cachedMessages, result.messages || []));
+          markChatRead(chatId);
         } catch (error) {
           errorMessage = getErrorMessage(error, "Chat load failed.");
           logger("hydrateChatPage failed", error);
@@ -371,6 +410,13 @@ function createPkjsApp(options) {
       return cache.getSession();
     },
     setSession: function(session) {
+      var currentSession = cache.getSession() || {};
+      var currentSessionString = String(currentSession.sessionString || "");
+      var nextSessionString = String(session && session.sessionString || "");
+
+      if (currentSessionString !== nextSessionString) {
+        releaseTelegramAdapter();
+      }
       if (session && session.sessionString) {
         cache.clearAuthState();
       }
@@ -560,6 +606,7 @@ function createPkjsApp(options) {
       return { ok: true };
     },
     logout: function() {
+      releaseTelegramAdapter();
       cache.clearAll();
       liveChatList = [];
       liveMessagePages = {};

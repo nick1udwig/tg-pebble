@@ -459,4 +459,25 @@ describe("native Telegram client facade", () => {
       }),
     ]);
   });
+
+  it("marks Telegram history read through the native client", async () => {
+    const sender = {
+      invoke: vi.fn(async () => ({})),
+    };
+    const client = new NativeTelegramClient({ sender });
+    const peer = {
+      className: "InputPeerUser",
+      userId: "42",
+      accessHash: "99",
+    };
+
+    await client.markRead(peer, 12);
+
+    expect(sender.invoke).toHaveBeenCalledTimes(1);
+    expect(sender.invoke.mock.calls[0][0].request).toMatchObject({
+      className: "messages.readHistory",
+      peer,
+      maxId: 12,
+    });
+  });
 });

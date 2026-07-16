@@ -139,27 +139,82 @@ describe("telegram adapter mapping", () => {
     ]);
   });
 
-  it("connects the Telegram client before hydrating dialogs", async () => {
+  it("reuses one connected client and marks opened chats read", async () => {
     const client = {
       connect: vi.fn(async () => {}),
       disconnect: vi.fn(async () => {}),
       getDialogs: vi.fn(async () => []),
+      getMessages: vi.fn(async () => [
+        { id: 12, out: false, senderId: "42", sender: { firstName: "Alice" }, message: "Latest" },
+      ]),
+      markRead: vi.fn(async () => ({})),
     };
+    const clientFactory = vi.fn(() => client);
     const adapter = createTelegramAdapter({
       enabled: true,
       sessionString: "saved-session",
-      clientFactory() {
-        return client;
-      },
+      clientFactory,
     });
 
     await expect(adapter.hydrateChatList({ limit: 5, cachedRefs: {} })).resolves.toEqual({
       chats: [],
       chatRefs: {},
     });
+    await expect(adapter.hydrateChatPage({
+      chatId: 9,
+      remoteRef: { peerType: "user", peerId: "42", accessHash: "99" },
+      limit: 5,
+    })).resolves.toMatchObject({
+      chatId: 9,
+      messages: [expect.objectContaining({ text: "Latest" })],
+    });
 
+    expect(clientFactory).toHaveBeenCalledTimes(1);
     expect(client.connect).toHaveBeenCalledTimes(1);
     expect(client.getDialogs).toHaveBeenCalledTimes(1);
+    expect(client.getMessages).toHaveBeenCalledTimes(1);
+    expect(client.markRead).toHaveBeenCalledWith({
+      className: "InputPeerUser",
+      userId: "42",
+      accessHash: "99",
+    }, 12);
+    expect(client.disconnect).not.toHaveBeenCalled();
+
+    await adapter.disconnect();
     expect(client.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("serializes operations on the shared Telegram connection", async () => {
+    let resolveDialogs;
+    const client = {
+      connect: vi.fn(async () => {}),
+      disconnect: vi.fn(async () => {}),
+      getDialogs: vi.fn(() => new Promise((resolve) => {
+        resolveDialogs = resolve;
+      })),
+      sendMessage: vi.fn(async () => ({ id: 5 })),
+    };
+    const adapter = createTelegramAdapter({
+      enabled: true,
+      sessionString: "saved-session",
+      clientFactory: () => client,
+    });
+
+    const dialogsPromise = adapter.hydrateChatList({ limit: 5, cachedRefs: {} });
+    const sendPromise = adapter.sendTextMessage({
+      remoteRef: { peerType: "user", peerId: "42", accessHash: "99" },
+      text: "Hello",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(client.getDialogs).toHaveBeenCalledTimes(1);
+    expect(client.sendMessage).not.toHaveBeenCalled();
+
+    resolveDialogs([]);
+    await dialogsPromise;
+    await sendPromise;
+
+    expect(client.sendMessage).toHaveBeenCalledTimes(1);
+    await adapter.disconnect();
   });
 });

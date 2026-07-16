@@ -15,6 +15,7 @@
 #define TG_FOOTER_HEIGHT 18
 #define TG_PREVIEW_SCROLL_HEIGHT 88
 #define TG_SEND_RESULT_TIMEOUT_MS 30000
+#define TG_REFRESH_INTERVAL_MS 10000
 
 #define TG_MSG_APP_READY "app_ready"
 #define TG_MSG_OPEN_CHAT "open_chat"
@@ -82,6 +83,7 @@ static TextLayer *s_settings_sync_layer;
 
 static AppTimer *s_bootstrap_timer;
 static AppTimer *s_send_result_timer;
+static AppTimer *s_refresh_timer;
 
 #if defined(PBL_MICROPHONE)
 static DictationSession *s_dictation_session;
@@ -118,6 +120,7 @@ static void prv_update_preview_contents(void);
 static void prv_request_chat_list(void);
 static void prv_request_chat_page(int32_t chat_id);
 static void prv_schedule_bootstrap(uint32_t delay_ms);
+static void prv_schedule_refresh(void);
 static void prv_copy_string(char *dest, size_t dest_size, const char *src);
 static void prv_handle_send_delivery_failure(const char *message);
 static void prv_start_send_result_timer(void);
@@ -459,6 +462,47 @@ static void prv_request_chat_page(int32_t chat_id) {
   prv_set_sync_status_from_string("syncing");
   (void)snprintf(payload, sizeof(payload), "%ld", (long)chat_id);
   (void)prv_send_request_with_id(TG_MSG_OPEN_CHAT, payload, s_chat_page_request_id);
+}
+
+static void prv_refresh_chat_list_in_place(void) {
+  prv_set_sync_status_from_string("syncing");
+  (void)prv_send_request(TG_MSG_APP_READY, "");
+}
+
+static void prv_refresh_chat_page_in_place(int32_t chat_id) {
+  char payload[16];
+
+  s_chat_page_request_id += 1;
+  if (s_chat_page_request_id == 0) {
+    s_chat_page_request_id = 1;
+  }
+  prv_set_sync_status_from_string("syncing");
+  (void)snprintf(payload, sizeof(payload), "%ld", (long)chat_id);
+  (void)prv_send_request_with_id(TG_MSG_OPEN_CHAT, payload, s_chat_page_request_id);
+}
+
+static void prv_refresh_timer_callback(void *context) {
+  Window *top_window = window_stack_get_top_window();
+
+  (void)context;
+  s_refresh_timer = NULL;
+
+  if (!s_waiting_for_send_result) {
+    if (top_window == s_chat_window && s_active_chat_id >= 0) {
+      prv_refresh_chat_page_in_place(s_active_chat_id);
+    } else if (top_window == s_chat_list_window) {
+      prv_refresh_chat_list_in_place();
+    }
+  }
+
+  prv_schedule_refresh();
+}
+
+static void prv_schedule_refresh(void) {
+  if (s_refresh_timer) {
+    app_timer_cancel(s_refresh_timer);
+  }
+  s_refresh_timer = app_timer_register(TG_REFRESH_INTERVAL_MS, prv_refresh_timer_callback, NULL);
 }
 
 static void prv_append_outgoing_message(const char *text) {
@@ -1270,11 +1314,15 @@ static void prv_init(void) {
 
   window_stack_push(s_chat_list_window, true);
   prv_schedule_bootstrap(700);
+  prv_schedule_refresh();
 }
 
 static void prv_deinit(void) {
   if (s_bootstrap_timer) {
     app_timer_cancel(s_bootstrap_timer);
+  }
+  if (s_refresh_timer) {
+    app_timer_cancel(s_refresh_timer);
   }
   prv_cancel_send_result_timer();
   prv_sync_status_animation_stop();

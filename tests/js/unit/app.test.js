@@ -265,10 +265,12 @@ describe("createPkjsApp", () => {
   });
 
   it("uses the Telegram adapter when a session is available", async () => {
+    let adapterFactoryCalls = 0;
     const app = createPkjsApp({
       storage: createMemoryStorage(),
       initialSession: { sessionString: "live-session" },
       telegramAdapterFactory() {
+        adapterFactoryCalls += 1;
         return {
           isConfigured() {
             return true;
@@ -315,12 +317,14 @@ describe("createPkjsApp", () => {
       senderName: "Live Alice",
       text: "Latest",
     });
+    expect(app.getChatListSnapshot().chats[0].unreadCount).toBe(0);
     expect(sendResult).toEqual({ ok: true });
     expect((await app.getChatPage(7)).messages.at(-1)).toMatchObject({
       senderName: "You",
       text: "Reply",
       outgoing: true,
     });
+    expect(adapterFactoryCalls).toBe(1);
   });
 
   it("keeps full live results while persisting only the compact warm cache", async () => {

@@ -499,6 +499,13 @@ NativeTelegramClient.prototype.getMessages = function(inputPeer, params) {
   })).then(normalizeMessages);
 };
 
+NativeTelegramClient.prototype.markRead = function(inputPeer, maxId) {
+  return this.invoke(tl.Api.messages.ReadHistory({
+    peer: inputPeer,
+    maxId: Number(maxId || 0)
+  }));
+};
+
 NativeTelegramClient.prototype.sendMessage = function(inputPeer, params) {
   params = params || {};
   return this.invoke(tl.Api.messages.SendMessage({
