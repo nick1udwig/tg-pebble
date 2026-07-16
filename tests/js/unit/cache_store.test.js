@@ -19,6 +19,30 @@ function createMemoryStorage() {
   };
 }
 
+function createStaleLengthStorage() {
+  const data = new Map();
+
+  return {
+    getItem(key) {
+      return data.has(key) ? data.get(key) : null;
+    },
+    setItem(key, value) {
+      const serialized = String(value);
+      const previous = data.get(key);
+
+      if (previous !== undefined && serialized.length > previous.length) {
+        data.set(key, serialized.slice(0, previous.length));
+        return;
+      }
+
+      data.set(key, serialized);
+    },
+    removeItem(key) {
+      data.delete(key);
+    },
+  };
+}
+
 describe("createCacheStore", () => {
   it("persists settings with preview-off chat rows by default", () => {
     const store = createCacheStore(createMemoryStorage());
@@ -206,6 +230,34 @@ describe("createCacheStore", () => {
     expect(utf8ByteLength(pages[2001][3].senderName)).toBeLessThanOrEqual(ProtocolByteLimit.messageSender);
     expect(utf8ByteLength(pages[2001][3].text)).toBeLessThanOrEqual(ProtocolByteLimit.messageText);
     expect(pages[2001][3].text.endsWith(emoji)).toBe(false);
+  });
+
+  it("replaces differently sized values when storage would clip an overwrite", () => {
+    const store = createCacheStore(createStaleLengthStorage());
+    const firstMessage = {
+      senderId: 1,
+      senderName: "Alice",
+      outgoing: false,
+      text: "first",
+      showSender: true,
+    };
+
+    store.setMessagePages({ 2001: [firstMessage] });
+    store.setMessagePages({
+      2001: [
+        firstMessage,
+        {
+          senderId: 1,
+          senderName: "You",
+          outgoing: true,
+          text: "Warm relaunch message",
+          showSender: true,
+        },
+      ],
+    });
+
+    expect(store.getMessagePages()[2001]).toHaveLength(2);
+    expect(store.getMessagePages()[2001][1].text).toBe("Warm relaunch message");
   });
 
   it("stores message pages when Object.keys is unavailable", () => {

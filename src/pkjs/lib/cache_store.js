@@ -241,7 +241,17 @@ function createCacheStore(storage, options) {
   }
 
   function setJson(key, value) {
-    storage.setItem(getKey(key), JSON.stringify(value));
+    var storageKey = getKey(key);
+    var serialized = JSON.stringify(value);
+    var previous = storage.getItem(storageKey);
+
+    // Some legacy localStorage backends keep stale length metadata when a
+    // differently sized value is overwritten and the process exits abruptly.
+    if (previous !== null && previous !== undefined &&
+        utf8ByteLength(String(previous)) !== utf8ByteLength(serialized)) {
+      storage.removeItem(storageKey);
+    }
+    storage.setItem(storageKey, serialized);
     return value;
   }
 
