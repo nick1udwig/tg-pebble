@@ -978,6 +978,40 @@ describe("PKJS config auth flow", () => {
     }
   });
 
+  it("redacts embedded config state from logs", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const harness = await loadPkjsHarness({
+      initialStorage: {
+        "tg_pebble:session": JSON.stringify({
+          sessionString: "",
+          phoneNumber: "+15551234567",
+          accountLabel: "",
+          userId: "",
+        }),
+        "tg_pebble:auth_state": JSON.stringify({
+          phoneNumber: "+15551234567",
+          phoneCodeHash: "private-code-hash",
+          passwordHint: "private-hint",
+        }),
+      },
+    });
+
+    try {
+      harness.listeners.get("showConfiguration")();
+
+      expect(globalThis.Pebble.openURL.mock.calls[0][0]).toContain("%2B15551234567");
+      const loggedText = logSpy.mock.calls.flat().join(" ");
+      expect(loggedText).toContain("configUrlBase");
+      expect(loggedText).not.toContain("+15551234567");
+      expect(loggedText).not.toContain("%2B15551234567");
+      expect(loggedText).not.toContain("private-code-hash");
+      expect(loggedText).not.toContain("private-hint");
+      expect(loggedText).not.toContain("state=");
+    } finally {
+      harness.restore();
+    }
+  });
+
   it("surfaces configuration errors when no Telegram auth config is available", async () => {
     const harness = await loadPkjsHarness({
       env: {

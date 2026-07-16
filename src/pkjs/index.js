@@ -359,13 +359,32 @@ function sendSettingsState(syncState) {
   );
 }
 
+function summarizeConfigUrl(configUrl) {
+  var value = String(configUrl || "");
+  var queryIndex = value.indexOf("?");
+  var fragmentIndex = value.indexOf("#");
+  var endIndex = value.length;
+
+  if (queryIndex >= 0 && queryIndex < endIndex) {
+    endIndex = queryIndex;
+  }
+  if (fragmentIndex >= 0 && fragmentIndex < endIndex) {
+    endIndex = fragmentIndex;
+  }
+
+  return {
+    configUrlBase: value.slice(0, endIndex),
+    hasState: value.indexOf("state=") >= 0
+  };
+}
+
 function openConfiguration() {
   var configUrl = buildConfigPageUrl(
     telegramRuntimeConfig && telegramRuntimeConfig.configUrl ? telegramRuntimeConfig.configUrl : "http://127.0.0.1:4173",
     app.getConfigState(),
     Date.now()
   );
-  log("showConfiguration", { configUrl: configUrl });
+  log("showConfiguration", summarizeConfigUrl(configUrl));
   Pebble.openURL(configUrl);
 }
 
