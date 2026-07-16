@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { bytesToHex } from "../../../src/pkjs/lib/tgproto/bytes.js";
+import { ByteWriter, bytesToHex } from "../../../src/pkjs/lib/tgproto/bytes.js";
 import { NativeTelegramClient } from "../../../src/pkjs/lib/tgproto/client.js";
 import {
   MtProtoState,
@@ -10,8 +10,10 @@ import {
 } from "../../../src/pkjs/lib/tgproto/mtproto.js";
 import {
   NativeMtProtoSender,
+  RPC_RESULT_ID,
   createTransportError,
 } from "../../../src/pkjs/lib/tgproto/sender.js";
+import { Api, serializeObject } from "../../../src/pkjs/lib/tgproto/tl.js";
 
 function createIdentityCtr() {
   return {
@@ -34,6 +36,14 @@ function createFakeStream() {
       this.closed = true;
     },
   };
+}
+
+function createRpcResult(requestMessageId, result) {
+  const writer = new ByteWriter();
+  writer.writeUInt32(RPC_RESULT_ID);
+  writer.writeInt64(requestMessageId);
+  writer.writeRaw(serializeObject(result));
+  return writer.result();
 }
 
 describe("tgproto MTProto state", () => {
@@ -76,6 +86,55 @@ describe("native MTProto sender", () => {
     });
     expect(error.message).toContain("auth key not found");
     expect(createTransportError(new Uint8Array(8))).toBeNull();
+  });
+
+  it("ignores unsolicited updates and unrelated RPC results", async () => {
+    const request = Api.messages.GetHistory({
+      peer: Api.InputPeerSelf({}),
+      offsetId: 0,
+      offsetDate: 0,
+      addOffset: 0,
+      limit: 20,
+      maxId: 0,
+      minId: 0,
+      hash: "0",
+    });
+    const expectedResult = Api.messages.Messages({
+      messages: [],
+      chats: [],
+      users: [],
+    });
+    const packets = [
+      { body: serializeObject(Api.UpdatesTooLong({})) },
+      { body: createRpcResult("122", expectedResult) },
+      { body: createRpcResult("123", expectedResult) },
+    ];
+    const sender = new NativeMtProtoSender({});
+    sender.transport = {
+      send: vi.fn(),
+      recv: vi.fn(async () => packets.shift()),
+    };
+    sender.state = {
+      lastMessageId: "",
+      wrapEncrypted: vi.fn(async () => {
+        sender.state.lastMessageId = "123";
+        return new Uint8Array([1, 2, 3, 4]);
+      }),
+      unwrapEncrypted: vi.fn(async (packet) => ({ body: packet.body })),
+    };
+    sender.ensureAuthKey = vi.fn(async () => {});
+
+    await expect(sender.invoke({
+      request,
+      payload: new Uint8Array([1, 2, 3, 4]),
+      client: { session: {} },
+    })).resolves.toMatchObject({
+      tlName: "messages.messages",
+      messages: [],
+    });
+
+    expect(sender.transport.recv).toHaveBeenCalledTimes(3);
+    expect(sender.transport.send).toHaveBeenCalledTimes(1);
   });
 
   it("opens the PKJS-compatible obfuscated abridged transport", async () => {

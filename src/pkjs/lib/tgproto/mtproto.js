@@ -125,6 +125,7 @@ function MtProtoState(session, options) {
   this.serverSalt = session && session.serverSalt ? session.serverSalt : "0";
   this.timeOffset = session && session.timeOffset ? Number(session.timeOffset) : 0;
   this.sequence = 0;
+  this.lastMessageId = "";
   this.randomBytes = options.randomBytes || defaultRandomBytes;
 }
 
@@ -154,6 +155,8 @@ MtProtoState.prototype.wrapEncrypted = function(body, cryptoProvider) {
   var seqNo = this.nextSeqNo(true);
   var padding;
   var data;
+
+  this.lastMessageId = messageId;
 
   if (!authKey || !authKey.length || !authKeyId) {
     return Promise.reject(new Error("Telegram auth key is required for encrypted MTProto requests."));

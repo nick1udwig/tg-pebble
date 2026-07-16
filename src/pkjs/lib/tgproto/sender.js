@@ -43,17 +43,22 @@ function isServiceMessage(result) {
     name === "bad_server_salt";
 }
 
-function readRpcResultBody(request, body) {
+function readRpcResultBody(request, body, expectedRequestMessageId) {
   var reader = new bytes.ByteReader(body);
   var constructorId = reader.readUInt32();
   var count;
   var index;
   var messageBody;
   var nested;
+  var requestMessageId;
+  var directResult;
   var fallback = null;
 
   if (constructorId === RPC_RESULT_ID) {
-    reader.readInt64(false);
+    requestMessageId = reader.readInt64(false);
+    if (expectedRequestMessageId && String(requestMessageId) !== String(expectedRequestMessageId)) {
+      return null;
+    }
     return tl.deserializeResult(request, reader.readRaw(reader.remaining()));
   }
 
@@ -63,7 +68,7 @@ function readRpcResultBody(request, body) {
       reader.readInt64(false);
       reader.readInt32();
       messageBody = reader.readRaw(reader.readInt32());
-      nested = readRpcResultBody(request, messageBody);
+      nested = readRpcResultBody(request, messageBody, expectedRequestMessageId);
       if (nested !== null && nested !== undefined) {
         if (isServiceMessage(nested)) {
           fallback = nested;
@@ -75,7 +80,8 @@ function readRpcResultBody(request, body) {
     return fallback;
   }
 
-  return tl.deserializeObject(body);
+  directResult = tl.deserializeObject(body);
+  return isServiceMessage(directResult) ? directResult : null;
 }
 
 function updateServerSaltFromService(state, session, result) {
@@ -195,7 +201,7 @@ NativeMtProtoSender.prototype.invoke = function(message) {
   var payload = message.payload;
   var session = message.client && message.client.session;
 
-  function receiveResult(retriedAfterSalt) {
+  function receiveResult(retriedAfterSalt, requestMessageId) {
     return self.transport.recv().then(function(responsePacket) {
       var transportError = createTransportError(responsePacket);
       if (transportError) {
@@ -203,7 +209,11 @@ NativeMtProtoSender.prototype.invoke = function(message) {
       }
       return self.state.unwrapEncrypted(responsePacket, self.cryptoProvider);
     }).then(function(messageBody) {
-      var result = readRpcResultBody(request, messageBody.body);
+      var result = readRpcResultBody(request, messageBody.body, requestMessageId);
+
+      if (result === null || result === undefined) {
+        return receiveResult(retriedAfterSalt, requestMessageId);
+      }
 
       if (result && result.tlName === "bad_server_salt" && !retriedAfterSalt) {
         updateServerSaltFromService(self.state, session, result);
@@ -212,7 +222,7 @@ NativeMtProtoSender.prototype.invoke = function(message) {
 
       if (isServiceMessage(result)) {
         updateServerSaltFromService(self.state, session, result);
-        return receiveResult(retriedAfterSalt);
+        return receiveResult(retriedAfterSalt, requestMessageId);
       }
 
       return result;
@@ -221,8 +231,9 @@ NativeMtProtoSender.prototype.invoke = function(message) {
 
   function sendAndReceive(retriedAfterSalt) {
     return self.state.wrapEncrypted(payload, self.cryptoProvider).then(function(packet) {
+      var requestMessageId = String(self.state.lastMessageId || "");
       self.transport.send(packet);
-      return receiveResult(retriedAfterSalt);
+      return receiveResult(retriedAfterSalt, requestMessageId);
     });
   }
 
