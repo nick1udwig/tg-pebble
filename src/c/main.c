@@ -43,6 +43,7 @@ typedef struct {
 typedef struct {
   bool show_sender;
   bool outgoing;
+  int16_t cached_height;
   char sender[TG_MESSAGE_SENDER_LENGTH];
   char text[TG_MESSAGE_TEXT_LENGTH];
 } TgMessageItem;
@@ -516,6 +517,7 @@ static void prv_append_outgoing_message(const char *text) {
   message = &s_messages[index];
   message->show_sender = index == 0 || !s_messages[index - 1].outgoing;
   message->outgoing = true;
+  message->cached_height = 0;
   prv_copy_string(message->sender, sizeof(message->sender), "You");
   prv_copy_string(message->text, sizeof(message->text), text);
   s_message_count += 1;
@@ -727,6 +729,7 @@ static uint16_t prv_chat_get_num_rows(struct MenuLayer *menu_layer, uint16_t sec
 
 static int16_t prv_chat_get_cell_height(struct MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
   GRect bounds = layer_get_bounds(menu_layer_get_layer(menu_layer));
+  TgMessageItem *message;
   GTextAlignment alignment = GTextAlignmentLeft;
   GSize text_size;
   int16_t height = 8;
@@ -737,17 +740,23 @@ static int16_t prv_chat_get_cell_height(struct MenuLayer *menu_layer, MenuIndex 
     return 40;
   }
 
-  alignment = s_messages[cell_index->row].outgoing ? GTextAlignmentRight : GTextAlignmentLeft;
+  message = &s_messages[cell_index->row];
+  if (message->cached_height > 0) {
+    return message->cached_height;
+  }
+
+  alignment = message->outgoing ? GTextAlignmentRight : GTextAlignmentLeft;
   text_size = graphics_text_layout_get_content_size(
-      s_messages[cell_index->row].text, fonts_get_system_font(FONT_KEY_GOTHIC_18),
+      message->text, fonts_get_system_font(FONT_KEY_GOTHIC_18),
       GRect(0, 0, bounds.size.w - 16, 2000), GTextOverflowModeWordWrap, alignment);
 
-  if (s_messages[cell_index->row].show_sender) {
+  if (message->show_sender) {
     height += 14;
   }
 
   height += text_size.h + 8;
-  return height < 30 ? 30 : height;
+  message->cached_height = height < 30 ? 30 : height;
+  return message->cached_height;
 }
 
 static void prv_chat_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
@@ -1181,9 +1190,6 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
       if (request_id + 1 > s_chat_count) {
         s_chat_count = request_id + 1;
       }
-      if (s_chat_list_menu_layer) {
-        menu_layer_reload_data(s_chat_list_menu_layer);
-      }
     }
     return;
   }
@@ -1212,13 +1218,11 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
       s_chat_page_error[0] = '\0';
       s_messages[parsed.index].show_sender = parsed.show_sender;
       s_messages[parsed.index].outgoing = parsed.outgoing;
+      s_messages[parsed.index].cached_height = 0;
       prv_copy_string(s_messages[parsed.index].sender, sizeof(s_messages[parsed.index].sender), parsed.sender);
       prv_copy_string(s_messages[parsed.index].text, sizeof(s_messages[parsed.index].text), parsed.text);
       if (parsed.index + 1 > s_message_count) {
         s_message_count = parsed.index + 1;
-      }
-      if (s_chat_menu_layer) {
-        menu_layer_reload_data(s_chat_menu_layer);
       }
     }
     return;
