@@ -3,7 +3,7 @@
 var pako = require("pako");
 
 var bytes = require("./bytes");
-var schema = require("./tl_schema");
+var schema = require("./tl_schema_compiled");
 
 var VECTOR_CONSTRUCTOR_ID = 0x1cb5c415;
 var BOOL_FALSE_CONSTRUCTOR_ID = 0xbc799737;
@@ -11,7 +11,8 @@ var BOOL_TRUE_CONSTRUCTOR_ID = 0x997275b5;
 var TRUE_CONSTRUCTOR_ID = 0x3fedd339;
 var GZIP_PACKED_CONSTRUCTOR_ID = 0x3072cfa1;
 
-var parsedSchema = null;
+var definitionCacheById = {};
+var schemaFacade = null;
 
 function lowerFirst(value) {
   return String(value || "").slice(0, 1).toLowerCase() + String(value || "").slice(1);
@@ -105,78 +106,67 @@ function parseTlLine(line, isFunction) {
   };
 }
 
-function addDefinition(out, def) {
-  var pascalName;
+function normalizeLookupName(value) {
+  var parts = String(value || "").split(".");
+  var last = parts.length - 1;
+
+  parts[last] = lowerFirst(parts[last]);
+  return parts.join(".");
+}
+
+function definitionMatchesName(name, def) {
   var camelName;
-  var camelPascalName;
-  var namespaceAlias;
-  var namespaceCamelAlias;
-  var namespaceCamelPascalAlias;
 
   if (!def) {
-    return;
+    return false;
   }
 
-  out.byId[def.id] = def;
-  out.byName[def.tlName] = def;
-  out.byName[def.bareName] = def;
-  out.byBareName[def.bareName] = def;
-
-  pascalName = upperFirst(def.bareName);
   camelName = toCamelName(def.bareName);
-  camelPascalName = upperFirst(camelName);
-  out.byName[pascalName] = def;
-  out.byName[camelName] = def;
-  out.byName[camelPascalName] = def;
-  if (def.namespace) {
-    namespaceAlias = def.namespace + "." + pascalName;
-    namespaceCamelAlias = def.namespace + "." + camelName;
-    namespaceCamelPascalAlias = def.namespace + "." + camelPascalName;
-    out.byName[namespaceAlias] = def;
-    out.byName[namespaceCamelAlias] = def;
-    out.byName[namespaceCamelPascalAlias] = def;
-  }
+  return name === def.tlName || name === def.bareName || name === camelName ||
+    (def.namespace && (name === def.namespace + "." + def.bareName ||
+      name === def.namespace + "." + camelName));
 }
 
-function parseTlSchema(content, out) {
-  var lines = String(content || "").split(/\n/);
-  var isFunction = false;
-  var index;
-  var line;
+function findDefinitionById(id) {
+  var normalizedId = Number(id) >>> 0;
+  var source;
+  var def;
 
-  for (index = 0; index < lines.length; index += 1) {
-    line = lines[index].trim();
-    if (!line) {
-      continue;
-    }
-    if (line === "---functions---") {
-      isFunction = true;
-      continue;
-    }
-    if (line === "---types---") {
-      isFunction = false;
-      continue;
-    }
-    addDefinition(out, parseTlLine(line, isFunction));
+  if (Object.prototype.hasOwnProperty.call(definitionCacheById, normalizedId)) {
+    return definitionCacheById[normalizedId];
   }
+
+  source = schema.getDefinitionSourceById(normalizedId);
+  if (!source) {
+    return null;
+  }
+
+  def = parseTlLine(source.slice(1), source.charAt(0) === "1");
+  if (!def || def.id !== normalizedId) {
+    throw new Error("Invalid compiled TL definition for constructor 0x" + normalizedId.toString(16));
+  }
+  definitionCacheById[normalizedId] = def;
+  return def;
 }
 
-function getSchema() {
-  if (!parsedSchema) {
-    parsedSchema = {
-      byId: {},
-      byName: {},
-      byBareName: {}
-    };
-    parseTlSchema(schema.apiTl, parsedSchema);
-    parseTlSchema(schema.schemaTl, parsedSchema);
-  }
+function findDefinition(name) {
+  var normalizedName = normalizeLookupName(name);
+  var id = schema.getDefinitionIdByName(normalizedName);
+  var def = id == null ? null : findDefinitionById(id);
 
-  return parsedSchema;
+  return definitionMatchesName(normalizedName, def) ? def : null;
+}
+
+function findBareDefinition(name) {
+  var bareName = String(name || "");
+  var id = schema.getDefinitionIdByName(bareName);
+  var def = id == null ? null : findDefinitionById(id);
+
+  return def && def.bareName === bareName ? def : null;
 }
 
 function getDefinition(name) {
-  var def = getSchema().byName[String(name || "")];
+  var def = findDefinition(name);
 
   if (!def) {
     throw new Error("Unknown TL object: " + name);
@@ -186,13 +176,37 @@ function getDefinition(name) {
 }
 
 function getDefinitionById(id) {
-  var def = getSchema().byId[Number(id) >>> 0];
+  var def = findDefinitionById(id);
 
   if (!def) {
     throw new Error("Unknown TL constructor: 0x" + (Number(id) >>> 0).toString(16));
   }
 
   return def;
+}
+
+function createSchemaLookup(find) {
+  return new Proxy({}, {
+    get: function(_target, property) {
+      if (typeof property !== "string") {
+        return undefined;
+      }
+      return find(property) || undefined;
+    }
+  });
+}
+
+function getSchema() {
+  if (!schemaFacade) {
+    schemaFacade = {
+      byId: createSchemaLookup(function(id) {
+        return /^\d+$/.test(id) ? findDefinitionById(id) : null;
+      }),
+      byName: createSchemaLookup(findDefinition),
+      byBareName: createSchemaLookup(findBareDefinition)
+    };
+  }
+  return schemaFacade;
 }
 
 function tlObject(className, args) {
@@ -227,7 +241,7 @@ function usesVectorConstructor(type) {
 
 function isBareType(type) {
   var clean = String(type || "").replace(/^!/, "");
-  var def = getSchema().byBareName[clean];
+  var def = findBareDefinition(clean);
 
   return !!def && clean.slice(0, 1) === clean.slice(0, 1).toLowerCase();
 }
@@ -421,7 +435,7 @@ function writeBareObjectDef(writer, def, object) {
 }
 
 function writeBareObject(writer, type, object) {
-  var def = getSchema().byBareName[String(type || "")];
+  var def = findBareDefinition(type);
   return writeBareObjectDef(writer, def, object);
 }
 
@@ -584,7 +598,7 @@ function readBareObjectDef(reader, def) {
 }
 
 function readBareObject(reader, type) {
-  var def = getSchema().byBareName[String(type || "")];
+  var def = findBareDefinition(type);
   return readBareObjectDef(reader, def);
 }
 

@@ -48,6 +48,8 @@
     "test:c": "bash scripts/test-c.sh",
     "test:config": "bash scripts/test-config.sh",
     "test:telegram": "bash scripts/test-telegram.sh",
+    "build:tl-schema": "node scripts/compile-tl-schema.mjs",
+    "check:tl-schema": "node scripts/compile-tl-schema.mjs --check",
     "build:pkjs-legacy": "node scripts/build-pkjs-legacy.mjs",
     "build:watch": "npm run build:pkjs-legacy && pebble build",
     "test:emulator": "bash scripts/test-emulator.sh",

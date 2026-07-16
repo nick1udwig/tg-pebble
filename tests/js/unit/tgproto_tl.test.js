@@ -9,6 +9,8 @@ import {
   Api,
   deserializeObject,
   deserializeResult,
+  getDefinition,
+  getDefinitionById,
   GZIP_PACKED_CONSTRUCTOR_ID,
   serializeObject,
   VECTOR_CONSTRUCTOR_ID,
@@ -17,6 +19,19 @@ import {
 describe("tgproto TL codec", () => {
   it("negotiates the same API layer as the bundled schema", () => {
     expect(TELEGRAM_API_LAYER).toBe(apiLayer);
+  });
+
+  it("resolves compiled schema names and legacy camel aliases lazily", () => {
+    expect(getDefinition("auth.SendCode")).toMatchObject({
+      id: 0xa677244f,
+      tlName: "auth.sendCode",
+    });
+    expect(getDefinition("ReqDHParams")).toMatchObject({
+      id: 0xd712e4be,
+      tlName: "req_DH_params",
+    });
+    expect(getDefinitionById(0x997275b5).tlName).toBe("boolTrue");
+    expect(() => getDefinition("NotARealConstructor")).toThrow("Unknown TL object");
   });
 
   it("serializes auth.sendCode with CodeSettings", () => {
