@@ -62,6 +62,34 @@ describe("telegram auth helpers", () => {
     expect(client.getWebSocketUrl()).toBe("wss://venus.web.telegram.org:443/apiws");
   });
 
+  it("preserves the data center stored with a restored auth key", () => {
+    const session = new NativeTelegramSession();
+    const authKey = new Uint8Array(256);
+    authKey.fill(7);
+    session.setDC(1, "pluto.web.telegram.org", 443);
+    session.setAuthKey(authKey, "123456789");
+
+    const client = createTelegramClient({
+      apiId: 123456,
+      apiHash: "hash",
+      telegramWebDcId: 2,
+      telegramWebDcHost: "venus.web.telegram.org",
+      telegramWebDcPort: 443,
+      forceWSS: true,
+      testServers: false,
+    }, session.save());
+
+    expect(client.dc).toEqual({
+      dcId: 1,
+      host: "pluto.web.telegram.org",
+      port: 443,
+    });
+    expect(client.session.dcId).toBe(1);
+    expect(client.session.serverAddress).toBe("pluto.web.telegram.org");
+    expect(client.session.port).toBe(443);
+    expect(client.getWebSocketUrl()).toBe("wss://pluto.web.telegram.org:443/apiws");
+  });
+
   it("uses plain WebSocket transport when WSS is disabled", () => {
     const client = createTelegramClient({
       apiId: 123456,

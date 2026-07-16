@@ -32,6 +32,19 @@ function getTelegramWebDc(dcId) {
   return dc;
 }
 
+function hasRestoredSessionDc(session) {
+  return !!(
+    session &&
+    session.authKey &&
+    session.authKey.length &&
+    isFiniteNumber(Number(session.dcId)) &&
+    Number(session.dcId) > 0 &&
+    String(session.serverAddress || "").trim() &&
+    isFiniteNumber(Number(session.port)) &&
+    Number(session.port) > 0
+  );
+}
+
 function createInputPeer(remoteRef) {
   if (!remoteRef || !remoteRef.peerType || !remoteRef.peerId) {
     return null;
@@ -82,7 +95,15 @@ function NativeTelegramClient(options) {
     };
   }
   this.session = new sessionLib.NativeTelegramSession(this.options.sessionString || "");
-  this.session.setDC(this.dc.dcId, this.dc.host, this.dc.port);
+  if (hasRestoredSessionDc(this.session)) {
+    this.dc = {
+      dcId: Number(this.session.dcId),
+      host: String(this.session.serverAddress),
+      port: Number(this.session.port)
+    };
+  } else {
+    this.session.setDC(this.dc.dcId, this.dc.host, this.dc.port);
+  }
   this.sender = this.options.sender || null;
   this.randomBytes = this.options.randomBytes ||
     (this.sender && this.sender.randomBytes) || secureRandom.defaultRandomBytes;
