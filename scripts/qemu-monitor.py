@@ -27,6 +27,12 @@ def main() -> int:
 
     sendkey_parser = subparsers.add_parser("sendkey", help="Inject one or more keyboard events")
     sendkey_parser.add_argument("keys", nargs="+", help="QEMU key names, for example q, w, s, x")
+    sendkey_parser.add_argument(
+        "--hold-ms",
+        type=int,
+        default=50,
+        help="How long QEMU holds each key before release (default: 50 ms)",
+    )
     sendkey_parser.add_argument("--delay-ms", type=int, default=150, help="Delay between keys")
 
     raw_parser = subparsers.add_parser("raw", help="Send a raw QEMU monitor command")
@@ -38,8 +44,14 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.command == "sendkey":
+        if args.hold_ms < 1:
+            parser.error("--hold-ms must be at least 1")
+        if args.delay_ms < 0:
+            parser.error("--delay-ms must not be negative")
         for key in args.keys:
-            send_command(args.port, f"sendkey {key}", delay=args.delay_ms / 1000.0)
+            # QEMU's 100 ms default reaches Pebble's button-repeat boundary;
+            # 50 ms remains long enough for reliable Select events.
+            send_command(args.port, f"sendkey {key} {args.hold_ms}", delay=args.delay_ms / 1000.0)
         return 0
 
     if args.command == "raw":

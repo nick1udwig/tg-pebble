@@ -249,6 +249,24 @@ PY
   return 1
 }
 
+require_transcribe_event() {
+  local pattern="$1"
+  local description="$2"
+
+  if grep -Fq -- "${pattern}" "${transcribe_log}"; then
+    return 0
+  fi
+
+  echo "Missing ${description} in transcription log: ${transcribe_log}" >&2
+  if [[ -s "${transcribe_log}" ]]; then
+    echo "Last 40 transcription log lines:" >&2
+    tail -n 40 "${transcribe_log}" >&2
+  else
+    echo "The transcription log is empty or missing." >&2
+  fi
+  return 1
+}
+
 if [[ "${scenario}" == "zero-state" ]]; then
   sleep 2
   python3 scripts/seed-emulator-app-state.py "${persist_dir}" "${app_uuid}" "${state_name}" >/dev/null
@@ -354,16 +372,16 @@ if [[ "${scenario}" == "dictation-success" ]]; then
   test -s "${dictation_listening_png}"
   test -s "${dictation_preview_png}"
   test -s "${dictation_sent_png}"
-  grep -q "VoiceControlCommand(command=1" "${transcribe_log}"
-  grep -q "Sending dictation result" "${transcribe_log}"
-  grep -q "AppMessage(command=1, transaction_id=" "${transcribe_log}"
+  require_transcribe_event "VoiceControlCommand(command=1" "dictation-start command"
+  require_transcribe_event "Sending dictation result" "dictation-result send"
+  require_transcribe_event "AppMessage(command=1, transaction_id=" "dictation acknowledgement"
 elif [[ "${scenario}" == "send-failure" ]]; then
   test -s "${dictation_listening_png}"
   test -s "${dictation_preview_png}"
   test -s "${send_failed_png}"
-  grep -q "VoiceControlCommand(command=1" "${transcribe_log}"
-  grep -q "Sending dictation result" "${transcribe_log}"
-  grep -q "AppMessage(command=1, transaction_id=" "${transcribe_log}"
+  require_transcribe_event "VoiceControlCommand(command=1" "dictation-start command"
+  require_transcribe_event "Sending dictation result" "dictation-result send"
+  require_transcribe_event "AppMessage(command=1, transaction_id=" "dictation acknowledgement"
 elif [[ "${scenario}" == "dictation-error" ]]; then
   test -s "${dictation_failed_png}"
   test -s "${transcribe_log}"
