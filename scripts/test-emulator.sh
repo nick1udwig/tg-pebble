@@ -27,6 +27,21 @@ dictation_error_settle_seconds="${TG_PEBBLE_DICTATION_ERROR_SETTLE_SECONDS:-5}"
 fixture_mode="1"
 skip_app_install="0"
 
+case "${target_chat_id}" in
+  1001)
+    fixture_preview="See you soon"
+    fixture_message_text="Still on for tonight?"
+    ;;
+  2001)
+    fixture_preview="Bob: brunch at 10?"
+    fixture_message_text="Brunch at 10?"
+    ;;
+  *)
+    fixture_preview=""
+    fixture_message_text=""
+    ;;
+esac
+
 if ! command -v pebble >/dev/null 2>&1; then
   echo "pebble-tool is not installed. Install the RePebble SDK toolchain before running emulator tests." >&2
   exit 2
@@ -85,6 +100,7 @@ fi
 pebble_python="${TG_PEBBLE_TOOL_PYTHON:-$(head -n 1 "$(command -v pebble)" | sed 's/^#!//')}"
 
 session_file="build/tests/${artifact_prefix}emulator-session.json"
+pkjs_log="${session_file%.json}.pkjs.log"
 persist_dir="${persist_dir_override:-build/tests/${artifact_prefix}emulator-persist}"
 artifact_dir="tests/emulator/artifacts"
 artifact_base="${artifact_dir}/${artifact_prefix}"
@@ -188,11 +204,23 @@ dark_header_pixels = sum(
     for x in range(target_width)
     if max(image.getpixel((x, y))) < 64
 )
+light_body_pixels = sum(
+    1
+    for y in range(header_height, target_height)
+    for x in range(target_width)
+    if max(image.getpixel((x, y))) > 128
+)
 
 # A populated fixture list selects its first chat, filling most of the top
-# row black. The loading and zero-state screens retain a gray section header.
+# row black, while the list body remains light. The loading and zero-state
+# screens retain a gray section header; the earliest boot frames are all black.
 minimum_dark_pixels = target_width * header_height // 2
-raise SystemExit(0 if dark_header_pixels >= minimum_dark_pixels else 1)
+minimum_light_pixels = target_width * (target_height - header_height) // 4
+raise SystemExit(
+    0
+    if dark_header_pixels >= minimum_dark_pixels and light_body_pixels >= minimum_light_pixels
+    else 1
+)
 PY
     then
       return 0
@@ -277,6 +305,43 @@ wait_for_transcribe_pattern() {
   return 1
 }
 
+wait_for_open_chat_request() {
+  local open_chat_pattern="data=6f70656e5f6368617400"
+  local target_chat_pattern
+  local attempts="${1:-20}"
+
+  case "${target_chat_id}" in
+    1001)
+      target_chat_pattern="data=3130303100"
+      ;;
+    2001)
+      target_chat_pattern="data=3230303100"
+      ;;
+  esac
+
+  for ((attempt = 1; attempt <= attempts; attempt += 1)); do
+    if [[ -f "${pkjs_log}" ]] && awk \
+      -v command="${open_chat_pattern}" \
+      -v chat="${target_chat_pattern}" \
+      'index($0, command) && index($0, chat) { found = 1 } END { exit !found }' \
+      "${pkjs_log}"; then
+      return 0
+    fi
+    if [[ "${target_chat_id}" == "1001" ]] && ((attempt == 8 || attempt == 16)); then
+      # Selecting the first row is idempotent until the chat opens. Retry if
+      # a busy emulator drops the initial click.
+      click_emulator_button select
+    fi
+    sleep 0.25
+  done
+
+  echo "Timed out waiting for the watch open-chat request: ${pkjs_log}" >&2
+  if [[ -s "${pkjs_log}" ]]; then
+    tail -n 40 "${pkjs_log}" >&2
+  fi
+  return 1
+}
+
 wait_for_transcription_server() {
   if wait_for_transcribe_pattern "Transcription server listening" 20; then
     return 0
@@ -358,6 +423,7 @@ else
       exit 2
       ;;
   esac
+  wait_for_open_chat_request
   sleep 1
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${chat_open_ppm}" >/dev/null
 fi
@@ -477,8 +543,8 @@ if [[ "${skip_storage_assert}" != "1" && "${skip_storage_assert}" != "true" ]]; 
       zero-state "${state_name}" >/dev/null
   elif [[ "${scenario}" == "read-only" ]]; then
     python3 scripts/assert-emulator-state.py "${persist_dir}" "${app_uuid}" --chat-id "${target_chat_id}" read-only \
-      "${expected_preview:-Bob: brunch at 10?}" \
-      "${expected_message_text:-Brunch at 10?}" >/dev/null
+      "${expected_preview:-${fixture_preview}}" \
+      "${expected_message_text:-${fixture_message_text}}" >/dev/null
   elif [[ "${scenario}" == "dictation-success" ]]; then
     if [[ -n "${expected_preview}" ]]; then
       python3 scripts/assert-emulator-state.py "${persist_dir}" "${app_uuid}" --chat-id "${target_chat_id}" send-success \
@@ -490,7 +556,7 @@ if [[ "${skip_storage_assert}" != "1" && "${skip_storage_assert}" != "true" ]]; 
     fi
   elif [[ "${scenario}" == "send-failure" || "${scenario}" == "dictation-error" ]]; then
     python3 scripts/assert-emulator-state.py "${persist_dir}" "${app_uuid}" --chat-id "${target_chat_id}" send-failure \
-      "${expected_preview:-Bob: brunch at 10?}" \
+      "${expected_preview:-${fixture_preview}}" \
       "${dictation_text}" >/dev/null
   fi
 fi

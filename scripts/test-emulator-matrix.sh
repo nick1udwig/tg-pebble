@@ -11,6 +11,7 @@ if [[ "${TG_PEBBLE_SESSION_GUARDED:-0}" != "1" ]]; then
 fi
 
 long_text="This is a deliberately long dictation sample for the Pebble emulator harness so we can verify watch safe truncation without breaking chat rendering."
+export TG_PEBBLE_EMULATOR_CHAT_ID="${TG_PEBBLE_EMULATOR_CHAT_ID:-1001}"
 
 expected_long_send_text="$(TG_PEBBLE_LONG_TEXT="${long_text}" node - <<'NODE'
 const { truncateUtf8 } = require('./src/pkjs/lib/protocol.js');
