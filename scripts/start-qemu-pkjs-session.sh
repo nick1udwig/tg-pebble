@@ -33,6 +33,7 @@ pkjs_python="${TG_PEBBLE_TOOL_PYTHON:-$(head -n 1 "${pebble_bin}" | sed 's/^#!//
 qemu_log="${session_file%.json}.qemu.log"
 pkjs_log="${session_file%.json}.pkjs.log"
 qemu_pid=""
+qemu_pgid=""
 pkjs_pid=""
 startup_complete=0
 
@@ -45,8 +46,12 @@ cleanup_failed_start() {
       kill "${pkjs_pid}" >/dev/null 2>&1 || true
       wait "${pkjs_pid}" >/dev/null 2>&1 || true
     fi
-    if [[ -n "${qemu_pid}" ]]; then
+    if [[ -n "${qemu_pgid}" ]]; then
+      kill -- "-${qemu_pgid}" >/dev/null 2>&1 || true
+    elif [[ -n "${qemu_pid}" ]]; then
       kill "${qemu_pid}" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "${qemu_pid}" ]]; then
       wait "${qemu_pid}" >/dev/null 2>&1 || true
     fi
     rm -f "${session_file}"
@@ -239,7 +244,10 @@ fi
 platform_args=()
 set_qemu_platform_args
 
-"${headless_prefix[@]}" "${qemu_bin}" \
+# Keep xvfb-run, Xvfb, and QEMU in one dedicated process group. On headless
+# runners, terminating only xvfb-run leaves its QEMU child consuming CPU for
+# every later matrix scenario.
+setsid "${headless_prefix[@]}" "${qemu_bin}" \
   -rtc base=localtime \
   -serial null \
   -serial "tcp::${qemu_port},${tcp_opts}" \
@@ -252,6 +260,7 @@ set_qemu_platform_args
   "${platform_args[@]}" \
   >"${qemu_log}" 2>&1 &
 qemu_pid=$!
+qemu_pgid="${qemu_pid}"
 
 wait_for_port "${qemu_port}" 80
 wait_for_port "${qemu_monitor_port}" 80
@@ -293,6 +302,7 @@ session = {
     "sdk_version": "${sdk_version}",
     "persist_dir": "${persist_dir}",
     "qemu_pid": int("${qemu_pid}"),
+    "qemu_pgid": int("${qemu_pgid}"),
     "pkjs_pid": int("${pkjs_pid}"),
     "qemu_port": int("${qemu_port}"),
     "qemu_serial_port": int("${qemu_serial_port}"),

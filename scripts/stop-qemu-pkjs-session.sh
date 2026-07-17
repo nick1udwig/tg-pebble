@@ -19,7 +19,22 @@ session_path = Path("${session_file}")
 session = json.loads(session_path.read_text(encoding="utf-8"))
 
 
+def read_process_stat(pid):
+    text = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8", errors="replace")
+    fields = text[text.rfind(")") + 2 :].split()
+    return fields[0], int(fields[2])
+
+
 def is_running(pid):
+    try:
+        state, _process_group = read_process_stat(pid)
+        if state == "Z":
+            return False
+    except (FileNotFoundError, ProcessLookupError):
+        return False
+    except OSError:
+        pass
+
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -56,8 +71,51 @@ def terminate(pid, timeout_seconds=5.0):
         time.sleep(0.05)
 
 
+def process_group_is_running(pgid):
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            state, process_group = read_process_stat(int(entry.name))
+        except (FileNotFoundError, ProcessLookupError, PermissionError, ValueError):
+            continue
+        if process_group == pgid and state != "Z":
+            return True
+    return False
+
+
+def terminate_process_group(pgid, timeout_seconds=5.0):
+    if not pgid:
+        return
+
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if not process_group_is_running(pgid):
+            return
+        time.sleep(0.1)
+
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+
+    deadline = time.time() + 2.0
+    while time.time() < deadline:
+        if not process_group_is_running(pgid):
+            return
+        time.sleep(0.05)
+
+
 terminate(session.get("pkjs_pid"))
-terminate(session.get("qemu_pid"))
+if session.get("qemu_pgid"):
+    terminate_process_group(session["qemu_pgid"])
+else:
+    terminate(session.get("qemu_pid"))
 
 state_path = Path(f"/tmp/pb-qemu-pypkjs-{session.get('qemu_port')}.json")
 for path in (state_path, session_path):

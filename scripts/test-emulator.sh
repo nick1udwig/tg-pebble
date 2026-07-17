@@ -212,10 +212,11 @@ light_body_pixels = sum(
 )
 
 # A populated fixture list selects its first chat, filling most of the top
-# row black, while the list body remains light. The loading and zero-state
-# screens retain a gray section header; the earliest boot frames are all black.
-minimum_dark_pixels = target_width * header_height // 2
-minimum_light_pixels = target_width * (target_height - header_height) // 4
+# row black, while more than two thirds of the list body remains light. The
+# loading and zero-state screens retain a gray section header; all-black boot
+# frames fail the body check, and the dithered Pebble logo is only half light.
+minimum_dark_pixels = target_width * header_height * 11 // 20
+minimum_light_pixels = target_width * (target_height - header_height) * 2 // 3
 raise SystemExit(
     0
     if dark_header_pixels >= minimum_dark_pixels and light_body_pixels >= minimum_light_pixels
