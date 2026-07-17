@@ -88,6 +88,17 @@ jobs:
       - name: Run emulator relaunch coverage
         run: env TG_PEBBLE_SESSION_GUARDED=1 bash scripts/test-emulator-relaunch.sh "${TG_PEBBLE_RELAUNCH_PLATFORM:-basalt}"
 
+      - name: Run emulator visual coverage
+        run: |
+          env TG_PEBBLE_SESSION_GUARDED=1 \
+            TG_PEBBLE_ARTIFACT_PREFIX="emery-success-" \
+            bash scripts/test-emulator.sh emery
+          env TG_PEBBLE_SESSION_GUARDED=1 \
+            TG_PEBBLE_ARTIFACT_PREFIX="emery-state-sign-in-required-" \
+            TG_PEBBLE_EMULATOR_SCENARIO=zero-state \
+            TG_PEBBLE_EMULATOR_STATE_NAME=sign-in-required \
+            bash scripts/test-emulator.sh emery
+
       - name: Review visual diffs
         run: bash scripts/review-visual-diffs.sh
 

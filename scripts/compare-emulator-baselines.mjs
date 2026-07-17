@@ -32,6 +32,23 @@ function maskVolatileRegions(image) {
   }
 }
 
+function normalizePlatformPalette(name, image) {
+  if (!name.startsWith("aplite-") && !name.startsWith("flint-")) {
+    return;
+  }
+
+  // These framebuffer captures render lit pixels as either gray or white
+  // depending on the headless SDL environment. Normalize that binary palette
+  // while retaining every rendered edge and glyph.
+  for (let index = 0; index < image.data.length; index += 4) {
+    const lit = Math.max(image.data[index], image.data[index + 1], image.data[index + 2]) > 128;
+    const value = lit ? 255 : 0;
+    image.data[index] = value;
+    image.data[index + 1] = value;
+    image.data[index + 2] = value;
+  }
+}
+
 mkdirSync(diffDir, { recursive: true });
 
 const baselineFiles = readdirSync(baselineDir)
@@ -66,6 +83,8 @@ for (const baselineName of baselineFiles) {
 
   maskVolatileRegions(baselineImage);
   maskVolatileRegions(artifactImage);
+  normalizePlatformPalette(baselineName, baselineImage);
+  normalizePlatformPalette(baselineName, artifactImage);
 
   const diffImage = new PNG({ width: baselineImage.width, height: baselineImage.height });
   const diffPixels = pixelmatch(
