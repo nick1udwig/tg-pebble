@@ -21,6 +21,7 @@ persist_dir_override="${TG_PEBBLE_EMULATOR_PERSIST_DIR:-}"
 expected_preview="${TG_PEBBLE_EXPECTED_PREVIEW:-}"
 expected_message_text="${TG_PEBBLE_EXPECTED_MESSAGE_TEXT:-}"
 expected_send_text="${TG_PEBBLE_EXPECTED_SEND_TEXT:-}"
+target_chat_id="${TG_PEBBLE_EMULATOR_CHAT_ID:-2001}"
 skip_storage_assert="${TG_PEBBLE_SKIP_STORAGE_ASSERT:-0}"
 dictation_error_settle_seconds="${TG_PEBBLE_DICTATION_ERROR_SETTLE_SECONDS:-5}"
 fixture_mode="1"
@@ -275,7 +276,18 @@ if [[ "${scenario}" == "zero-state" ]]; then
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${chat_list_ppm}" >/dev/null
 else
   wait_for_chat_list_ready "${chat_list_ppm}"
-  python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" sendkey x s >/dev/null
+  case "${target_chat_id}" in
+    1001)
+      python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" sendkey s >/dev/null
+      ;;
+    2001)
+      python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" sendkey x s >/dev/null
+      ;;
+    *)
+      echo "Unsupported emulator fixture target chat: ${target_chat_id}" >&2
+      exit 2
+      ;;
+  esac
   sleep 1
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${chat_open_ppm}" >/dev/null
 fi
@@ -389,22 +401,23 @@ fi
 
 if [[ "${skip_storage_assert}" != "1" && "${skip_storage_assert}" != "true" ]]; then
   if [[ "${scenario}" == "zero-state" ]]; then
-    python3 scripts/assert-emulator-state.py "${persist_dir}" "${app_uuid}" zero-state "${state_name}" >/dev/null
+    python3 scripts/assert-emulator-state.py "${persist_dir}" "${app_uuid}" --chat-id "${target_chat_id}" \
+      zero-state "${state_name}" >/dev/null
   elif [[ "${scenario}" == "read-only" ]]; then
-    python3 scripts/assert-emulator-state.py "${persist_dir}" "${app_uuid}" read-only \
+    python3 scripts/assert-emulator-state.py "${persist_dir}" "${app_uuid}" --chat-id "${target_chat_id}" read-only \
       "${expected_preview:-Bob: brunch at 10?}" \
       "${expected_message_text:-Brunch at 10?}" >/dev/null
   elif [[ "${scenario}" == "dictation-success" ]]; then
     if [[ -n "${expected_preview}" ]]; then
-      python3 scripts/assert-emulator-state.py "${persist_dir}" "${app_uuid}" send-success \
+      python3 scripts/assert-emulator-state.py "${persist_dir}" "${app_uuid}" --chat-id "${target_chat_id}" send-success \
         "${expected_send_text:-${dictation_text}}" \
         "${expected_preview}" >/dev/null
     else
-      python3 scripts/assert-emulator-state.py "${persist_dir}" "${app_uuid}" send-success \
+      python3 scripts/assert-emulator-state.py "${persist_dir}" "${app_uuid}" --chat-id "${target_chat_id}" send-success \
         "${expected_send_text:-${dictation_text}}" >/dev/null
     fi
   elif [[ "${scenario}" == "send-failure" || "${scenario}" == "dictation-error" ]]; then
-    python3 scripts/assert-emulator-state.py "${persist_dir}" "${app_uuid}" send-failure \
+    python3 scripts/assert-emulator-state.py "${persist_dir}" "${app_uuid}" --chat-id "${target_chat_id}" send-failure \
       "${expected_preview:-Bob: brunch at 10?}" \
       "${dictation_text}" >/dev/null
   fi

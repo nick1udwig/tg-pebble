@@ -2,7 +2,6 @@
 import argparse
 import dbm.dumb
 import json
-import re
 import time
 from pathlib import Path
 
@@ -27,11 +26,27 @@ def maybe_load_json(store, name: str, fallback):
     return load_first_json(store, name)
 
 
-def extract_chat_2001_messages(message_pages_text: str) -> str:
-    match = re.search(r'"2001":\[(?P<messages>.*?)\],"3001":\[', message_pages_text, re.DOTALL)
-    if not match:
-        raise SystemExit("Could not isolate fixture message page 2001 from emulator storage.")
-    return match.group("messages")
+def find_chat(chats, chat_id: int):
+    chat = next((entry for entry in chats if entry.get("id") == chat_id), None)
+    if not chat:
+        raise SystemExit(f"Missing fixture chat {chat_id} after emulator smoke test.")
+    return chat
+
+
+def load_chat_messages(store, chat_id: int):
+    pages = load_first_json(store, "message_pages")
+    messages = pages.get(str(chat_id), pages.get(chat_id))
+    if messages is None:
+        raise SystemExit(f"Missing fixture message page {chat_id} after emulator smoke test.")
+    return messages
+
+
+def has_message(messages, expected_text: str, outgoing: bool | None = None) -> bool:
+    return any(
+        message.get("text") == expected_text
+        and (outgoing is None or bool(message.get("outgoing")) is outgoing)
+        for message in messages
+    )
 
 
 def assert_zero_state(store, state_name: str) -> None:
@@ -69,61 +84,52 @@ def assert_zero_state(store, state_name: str) -> None:
     raise SystemExit(f"Unhandled zero state: {state_name}")
 
 
-def assert_read_only(store, expected_preview: str, expected_message_text: str | None) -> None:
+def assert_read_only(store, chat_id: int, expected_preview: str, expected_message_text: str | None) -> None:
     chats = load_first_json(store, "chat_list")
-    message_pages_text = store[key("message_pages")].decode("utf-8")
-    chat = next((entry for entry in chats if entry.get("id") == 2001), None)
-    if not chat:
-        raise SystemExit("Missing fixture chat 2001 after emulator smoke test.")
+    chat = find_chat(chats, chat_id)
     if chat.get("preview") != expected_preview:
         raise SystemExit(f"Expected preview {expected_preview!r}, got {chat.get('preview')!r}")
 
     if expected_message_text:
-        messages_blob = extract_chat_2001_messages(message_pages_text)
-        if f'"text":"{expected_message_text}"' not in messages_blob:
-            raise SystemExit(f"Expected message {expected_message_text!r} in fixture page 2001.")
+        messages = load_chat_messages(store, chat_id)
+        if not has_message(messages, expected_message_text):
+            raise SystemExit(f"Expected message {expected_message_text!r} in fixture page {chat_id}.")
 
 
-def assert_send_success(store, expected_text: str, expected_preview: str | None) -> None:
-    message_pages_text = store[key("message_pages")].decode("utf-8")
-    messages_blob = extract_chat_2001_messages(message_pages_text)
-    if f'"text":"{expected_text}"' not in messages_blob or '"outgoing":true' not in messages_blob:
-        raise SystemExit("Expected outgoing dictation message in fixture message page 2001 after send.")
+def assert_send_success(store, chat_id: int, expected_text: str, expected_preview: str | None) -> None:
+    messages = load_chat_messages(store, chat_id)
+    if not has_message(messages, expected_text, outgoing=True):
+        raise SystemExit(f"Expected outgoing dictation message in fixture page {chat_id} after send.")
 
     if expected_preview is None:
         return
 
     chats = load_first_json(store, "chat_list")
-    chat = next((entry for entry in chats if entry.get("id") == 2001), None)
-    if not chat:
-        raise SystemExit("Missing fixture chat 2001 after emulator smoke test.")
+    chat = find_chat(chats, chat_id)
     if chat.get("preview") != expected_preview:
         raise SystemExit(f"Expected updated preview {expected_preview!r}, got {chat.get('preview')!r}")
 
 
-def assert_send_failure(store, expected_preview: str, rejected_text: str) -> None:
+def assert_send_failure(store, chat_id: int, expected_preview: str, rejected_text: str) -> None:
     chats = load_first_json(store, "chat_list")
-    message_pages_text = store[key("message_pages")].decode("utf-8")
-    chat = next((entry for entry in chats if entry.get("id") == 2001), None)
-    if not chat:
-        raise SystemExit("Missing fixture chat 2001 after emulator smoke test.")
+    chat = find_chat(chats, chat_id)
     if chat.get("preview") != expected_preview:
         raise SystemExit(f"Expected preview {expected_preview!r}, got {chat.get('preview')!r}")
 
-    messages_blob = extract_chat_2001_messages(message_pages_text)
-    if f'"text":"{rejected_text}"' in messages_blob:
-        raise SystemExit(f"Unexpectedly found rejected text {rejected_text!r} in fixture page 2001.")
+    messages = load_chat_messages(store, chat_id)
+    if has_message(messages, rejected_text):
+        raise SystemExit(f"Unexpectedly found rejected text {rejected_text!r} in fixture page {chat_id}.")
 
 
 def run_assertion(store, args) -> None:
     if args.command == "zero-state":
         assert_zero_state(store, args.state_name)
     elif args.command == "read-only":
-        assert_read_only(store, args.expected_preview, args.expected_message_text)
+        assert_read_only(store, args.chat_id, args.expected_preview, args.expected_message_text)
     elif args.command == "send-success":
-        assert_send_success(store, args.expected_text, args.expected_preview)
+        assert_send_success(store, args.chat_id, args.expected_text, args.expected_preview)
     elif args.command == "send-failure":
-        assert_send_failure(store, args.expected_preview, args.rejected_text)
+        assert_send_failure(store, args.chat_id, args.expected_preview, args.rejected_text)
     else:
         raise SystemExit(f"Unhandled command: {args.command}")
 
@@ -132,6 +138,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Assert TG Pebble emulator PKJS storage for a scenario.")
     parser.add_argument("persist_dir")
     parser.add_argument("app_uuid")
+    parser.add_argument("--chat-id", type=int, default=2001, help="Fixture chat exercised by the scenario")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     zero = subparsers.add_parser("zero-state")
