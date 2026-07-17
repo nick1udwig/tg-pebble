@@ -152,6 +152,14 @@ print(app_info["uuid"])
 PY
 )"
 
+click_emulator_button() {
+  local button="$1"
+  local duration_ms="${2:-200}"
+
+  pebble emu-button --qemu "localhost:${qemu_port}" click "${button}" \
+    --duration "${duration_ms}" >/dev/null
+}
+
 wait_for_chat_list_ready() {
   local screenshot_path="$1"
   local attempts="${2:-${TG_PEBBLE_CHAT_LIST_READY_ATTEMPTS:-80}}"
@@ -241,12 +249,72 @@ PY
         return 0
       fi
       rm -f "${stable_screenshot_path}"
+    elif ((attempt == 8 || attempt == 16)); then
+      # A busy emulator can miss the first Stop click. Retry only while the
+      # screen is still unambiguously in the listening state so a delayed
+      # click cannot confirm the preview accidentally.
+      click_emulator_button select
     fi
     sleep 0.25
   done
 
   rm -f "${stable_screenshot_path}"
   echo "Timed out waiting for the dictation preview on ${platform}." >&2
+  return 1
+}
+
+wait_for_transcribe_pattern() {
+  local pattern="$1"
+  local attempts="${2:-20}"
+
+  for ((attempt = 1; attempt <= attempts; attempt += 1)); do
+    if [[ -f "${transcribe_log}" ]] && grep -Fq -- "${pattern}" "${transcribe_log}"; then
+      return 0
+    fi
+    sleep 0.25
+  done
+
+  return 1
+}
+
+wait_for_transcription_server() {
+  if wait_for_transcribe_pattern "Transcription server listening" 20; then
+    return 0
+  fi
+
+  echo "Timed out waiting for the transcription server: ${transcribe_log}" >&2
+  return 1
+}
+
+start_dictation_session() {
+  local start_attempt
+
+  for start_attempt in 1 2 3; do
+    click_emulator_button select
+    if wait_for_transcribe_pattern "VoiceControlCommand(command=1" 8; then
+      return 0
+    fi
+  done
+
+  echo "Timed out starting dictation on ${platform}: ${transcribe_log}" >&2
+  return 1
+}
+
+wait_for_send_request() {
+  local send_message_pattern="data=73656e645f6d65737361676500"
+  local attempts="${1:-24}"
+
+  for ((attempt = 1; attempt <= attempts; attempt += 1)); do
+    if grep -Fq -- "${send_message_pattern}" "${transcribe_log}"; then
+      return 0
+    fi
+    if ((attempt == 8 || attempt == 16)); then
+      click_emulator_button select
+    fi
+    sleep 0.25
+  done
+
+  echo "Timed out waiting for the watch send-message request: ${transcribe_log}" >&2
   return 1
 }
 
@@ -278,10 +346,12 @@ else
   wait_for_chat_list_ready "${chat_list_ppm}"
   case "${target_chat_id}" in
     1001)
-      python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" sendkey s >/dev/null
+      click_emulator_button select
       ;;
     2001)
-      python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" sendkey x s >/dev/null
+      click_emulator_button down 100
+      sleep 0.15
+      click_emulator_button select
       ;;
     *)
       echo "Unsupported emulator fixture target chat: ${target_chat_id}" >&2
@@ -295,32 +365,34 @@ fi
 if [[ "${scenario}" == "dictation-success" ]]; then
   pebble transcribe "${dictation_text}" --qemu "localhost:${qemu_port}" -vvvv >"${transcribe_log}" 2>&1 &
   transcribe_pid=$!
-  sleep 1
-  python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" sendkey s >/dev/null
-  sleep 2
+  wait_for_transcription_server
+  start_dictation_session
+  sleep 0.5
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${dictation_listening_ppm}" >/dev/null
-  python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" sendkey s >/dev/null
+  click_emulator_button select
   wait_for_dictation_preview "${dictation_preview_ppm}"
-  python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" sendkey s >/dev/null
+  click_emulator_button select
+  wait_for_send_request
   sleep 2
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${dictation_sent_ppm}" >/dev/null
 elif [[ "${scenario}" == "send-failure" ]]; then
   pebble transcribe "${dictation_text}" --qemu "localhost:${qemu_port}" -vvvv >"${transcribe_log}" 2>&1 &
   transcribe_pid=$!
-  sleep 1
-  python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" sendkey s >/dev/null
-  sleep 2
+  wait_for_transcription_server
+  start_dictation_session
+  sleep 0.5
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${dictation_listening_ppm}" >/dev/null
-  python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" sendkey s >/dev/null
+  click_emulator_button select
   wait_for_dictation_preview "${dictation_preview_ppm}"
-  python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" sendkey s >/dev/null
+  click_emulator_button select
+  wait_for_send_request
   sleep 2
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${send_failed_ppm}" >/dev/null
 elif [[ "${scenario}" == "dictation-error" ]]; then
   pebble transcribe --error "${dictation_error}" --qemu "localhost:${qemu_port}" -vvvv >"${transcribe_log}" 2>&1 &
   transcribe_pid=$!
-  sleep 1
-  python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" sendkey s >/dev/null
+  wait_for_transcription_server
+  start_dictation_session
   sleep "${dictation_error_settle_seconds}"
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${dictation_failed_ppm}" >/dev/null
 fi
@@ -386,14 +458,14 @@ if [[ "${scenario}" == "dictation-success" ]]; then
   test -s "${dictation_sent_png}"
   require_transcribe_event "VoiceControlCommand(command=1" "dictation-start command"
   require_transcribe_event "Sending dictation result" "dictation-result send"
-  require_transcribe_event "AppMessage(command=1, transaction_id=" "dictation acknowledgement"
+  require_transcribe_event "data=73656e645f6d65737361676500" "send-message request"
 elif [[ "${scenario}" == "send-failure" ]]; then
   test -s "${dictation_listening_png}"
   test -s "${dictation_preview_png}"
   test -s "${send_failed_png}"
   require_transcribe_event "VoiceControlCommand(command=1" "dictation-start command"
   require_transcribe_event "Sending dictation result" "dictation-result send"
-  require_transcribe_event "AppMessage(command=1, transaction_id=" "dictation acknowledgement"
+  require_transcribe_event "data=73656e645f6d65737361676500" "send-message request"
 elif [[ "${scenario}" == "dictation-error" ]]; then
   test -s "${dictation_failed_png}"
   test -s "${transcribe_log}"
