@@ -151,6 +151,50 @@ print(app_info["uuid"])
 PY
 )"
 
+wait_for_chat_list_ready() {
+  local screenshot_path="$1"
+  local attempts="${2:-${TG_PEBBLE_CHAT_LIST_READY_ATTEMPTS:-80}}"
+
+  for ((attempt = 1; attempt <= attempts; attempt += 1)); do
+    python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${screenshot_path}" >/dev/null
+    if "${pebble_python}" - "${screenshot_path}" "${platform}" <<'PY'
+import sys
+from PIL import Image
+
+path, platform = sys.argv[1:]
+target_width, target_height = (200, 228) if platform == "emery" else (144, 168)
+image = Image.open(path).convert("RGB")
+width, height = image.size
+
+if width < target_width or height < target_height:
+    raise SystemExit(1)
+
+left = (width - target_width) // 2
+top = (height - target_height) // 2
+image = image.crop((left, top, left + target_width, top + target_height))
+header_height = min(15, target_height)
+dark_header_pixels = sum(
+    1
+    for y in range(header_height)
+    for x in range(target_width)
+    if max(image.getpixel((x, y))) < 64
+)
+
+# A populated fixture list selects its first chat, filling most of the top
+# row black. The loading and zero-state screens retain a gray section header.
+minimum_dark_pixels = target_width * header_height // 2
+raise SystemExit(0 if dark_header_pixels >= minimum_dark_pixels else 1)
+PY
+    then
+      return 0
+    fi
+    sleep 0.25
+  done
+
+  echo "Timed out waiting for the fixture chat list on ${platform}." >&2
+  return 1
+}
+
 wait_for_dictation_preview() {
   local screenshot_path="$1"
   local attempts="${2:-24}"
@@ -205,14 +249,14 @@ PY
   return 1
 }
 
-sleep 2
 if [[ "${scenario}" == "zero-state" ]]; then
+  sleep 2
   python3 scripts/seed-emulator-app-state.py "${persist_dir}" "${app_uuid}" "${state_name}" >/dev/null
   pebble install build/tg-pebble.pbw --qemu "localhost:${qemu_port}" >/dev/null
   sleep 2
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${chat_list_ppm}" >/dev/null
 else
-  python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${chat_list_ppm}" >/dev/null
+  wait_for_chat_list_ready "${chat_list_ppm}"
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" sendkey x s >/dev/null
   sleep 1
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${chat_open_ppm}" >/dev/null
