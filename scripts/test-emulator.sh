@@ -152,6 +152,14 @@ print(session["qemu_monitor_port"])
 PY
 )"
 
+pkjs_port="$(python3 - <<PY
+import json
+from pathlib import Path
+session = json.loads(Path("${session_file}").read_text(encoding="utf-8"))
+print(session["pkjs_port"])
+PY
+)"
+
 qemu_port="$(python3 - <<PY
 import json
 from pathlib import Path
@@ -171,9 +179,13 @@ PY
 click_emulator_button() {
   local button="$1"
   local duration_ms="${2:-200}"
+  local settle_ms=$((duration_ms + 100))
 
-  pebble emu-button --qemu "localhost:${qemu_port}" click "${button}" \
-    --duration "${duration_ms}" >/dev/null
+  # Keep the relay connection alive until pypkjs has processed the release.
+  # pebble emu-button exits immediately after writing the release packet, which
+  # can randomly drop that packet and leave the next click ineffective.
+  "${pebble_python}" scripts/qemu-button.py --port "${pkjs_port}" \
+    --duration-ms "${duration_ms}" --settle-ms "${settle_ms}" "${button}" >/dev/null
 }
 
 wait_for_chat_list_ready() {
@@ -235,7 +247,7 @@ PY
 
 wait_for_dictation_preview() {
   local screenshot_path="$1"
-  local attempts="${2:-24}"
+  local attempts="${2:-40}"
   local stable_screenshot_path="${screenshot_path%.ppm}-stable.ppm"
 
   rm -f "${stable_screenshot_path}"
@@ -278,11 +290,6 @@ PY
         return 0
       fi
       rm -f "${stable_screenshot_path}"
-    elif ((attempt == 8 || attempt == 16)); then
-      # A busy emulator can miss the first Stop click. Retry only while the
-      # screen is still unambiguously in the listening state so a delayed
-      # click cannot confirm the preview accidentally.
-      click_emulator_button select
     fi
     sleep 0.25
   done
@@ -349,6 +356,60 @@ wait_for_transcription_server() {
   fi
 
   echo "Timed out waiting for the transcription server: ${transcribe_log}" >&2
+  return 1
+}
+
+watch_audio_stop_seen() {
+  [[ -f "${transcribe_log}" ]] && awk \
+    'index($0, "<- AudioStream(") && index($0, "data=StopTransfer())") { found = 1 } END { exit !found }' \
+    "${transcribe_log}"
+}
+
+wait_for_watch_audio_stop() {
+  local attempts="${1:-4}"
+
+  for ((attempt = 1; attempt <= attempts; attempt += 1)); do
+    if watch_audio_stop_seen; then
+      return 0
+    fi
+    sleep 0.25
+  done
+
+  return 1
+}
+
+stop_dictation_session() {
+  local stop_attempt
+  local hold_ms
+
+  for stop_attempt in 1 2 3; do
+    if watch_audio_stop_seen; then
+      return 0
+    fi
+
+    case "${stop_attempt}" in
+      1)
+        hold_ms=200
+        ;;
+      2)
+        hold_ms=300
+        ;;
+      3)
+        hold_ms=400
+        ;;
+    esac
+
+    click_emulator_button select "${hold_ms}"
+
+    if wait_for_watch_audio_stop 4; then
+      return 0
+    fi
+  done
+
+  echo "Timed out waiting for the watch to stop dictation on ${platform}: ${transcribe_log}" >&2
+  if [[ -s "${transcribe_log}" ]]; then
+    tail -n 40 "${transcribe_log}" >&2
+  fi
   return 1
 }
 
@@ -436,7 +497,7 @@ if [[ "${scenario}" == "dictation-success" ]]; then
   start_dictation_session
   sleep 0.5
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${dictation_listening_ppm}" >/dev/null
-  click_emulator_button select
+  stop_dictation_session
   wait_for_dictation_preview "${dictation_preview_ppm}"
   click_emulator_button select
   wait_for_send_request
@@ -449,7 +510,7 @@ elif [[ "${scenario}" == "send-failure" ]]; then
   start_dictation_session
   sleep 0.5
   python3 scripts/qemu-monitor.py --port "${qemu_monitor_port}" screendump "${dictation_listening_ppm}" >/dev/null
-  click_emulator_button select
+  stop_dictation_session
   wait_for_dictation_preview "${dictation_preview_ppm}"
   click_emulator_button select
   wait_for_send_request
